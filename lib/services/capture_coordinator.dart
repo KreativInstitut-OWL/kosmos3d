@@ -48,6 +48,9 @@ class CaptureCoordinator extends ChangeNotifier {
   int _generation = 0;
   Future<void> Function(DateTime)? onPhoto;
   List<Map<String, Object>> lastDispatch = [];
+
+  /// Start of the current Start..Stop run, logged with every photo event.
+  DateTime? runStarted;
   bool get busy => _locked;
   bool get active => _active;
   bool get cameraTimer => _cameraTimer;
@@ -136,6 +139,7 @@ class CaptureCoordinator extends ChangeNotifier {
     _locked = true;
     _active = _video || _interval != null;
     final generation = ++_generation;
+    runStarted = DateTime.now().toUtc();
     _state(CapturePhase.starting, 'Checking cameras');
     try {
       if (_cameraTimer) {

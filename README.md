@@ -85,7 +85,10 @@ Allow **Bluetooth**, **Local Network** and **Location** when asked.
 5. **New project.** Name it and keep **Outdoor Scan** (photo, Linear lens, 1 s interval, target ISO 100) or pick another preset. *Start* checks every camera before the first shot. If one disagrees, you are told which camera and which setting.
 6. **Capture.** Walk slowly. The coverage view shows where you have been and which directions are still empty. Tap *Stop* when you are done.
 
-The interval starts once every camera has saved the previous photo, so the cameras stay in step.
+**Interval timing** decides who keeps the beat:
+
+- **Camera timer** (default): every camera runs its own photo timer, started by one command to all of them. The interval is exact (measured 1.001 s on HERO13), and the cameras start within about 0.1 s of each other. Single shots are not confirmed one by one.
+- **App (confirmed)**: the app fires each shot and waits until every camera has saved it. Every shot is confirmed, but a HERO13 needs about 3 s per round.
 
 ## Getting the files off the cameras
 
@@ -100,6 +103,7 @@ Bluetooth is too slow for photos, so the originals come over each camera's own W
 Where files go:
 
 - Originals are stored **in the app**, per project: `kosmos3d_projects/<project>/captures/<serial>_<folder>_<file>`. Next to each file is a `.receipt.json` with its source path, size and checksum.
+- After an import into a project, `rig_sets.json` groups the photos into sets, one per shutter event, by the time each camera took them. Camera clocks only agree to about a second, so each camera is lined up by its first photo of the run. A camera that missed a shot leaves a gap in that set instead of shifting all later ones; extra photos are listed as unmatched.
 - With *Also copy to Photos / Gallery* on, a copy goes to `DCIM/KOSMOS3D` on Android or the Photos app on iPhone.
 - The SD cards stay untouched. Delete there when you are sure.
 - **Transfers → Save to phone** copies a project to `Downloads/KOSMOS3D` (Android) or *Files → KOSMOS 3D* (iPhone).

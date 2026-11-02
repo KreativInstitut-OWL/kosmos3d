@@ -299,6 +299,7 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
           : 'acknowledged_shutter_dispatch',
       'exposure_timestamp_verified': false,
       'camera_ids': _goPro.capture.cameraIds,
+      'run_started_utc': _goPro.capture.runStarted?.toIso8601String(),
       'camera_dispatch_timing': _goPro.capture.lastDispatch,
       'orientation_valid': _orientation.hasSample,
       'orientation_sample_utc': _orientation.sampleTime

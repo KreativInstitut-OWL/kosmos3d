@@ -1,6 +1,7 @@
 import 'dart:io';
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
+import '../services/rig_sets.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
@@ -87,6 +88,21 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
     }
   }
 
+  /// Groups a project's imported photos into rig sets by capture time.
+  Future<String?> _matchRigSets() async {
+    final captures = widget.projectCapturesPath;
+    if (captures == null) return null;
+    try {
+      final result = await writeRigSets(captures);
+      if (result == null) return null;
+      return 'Matched by capture time: ${result.completeSets} of '
+          '${result.sets.length} photo sets complete'
+          '${result.unmatched.isEmpty ? '' : ', ${result.unmatched.length} photos without a set'}.';
+    } catch (e) {
+      return 'Photo sets not matched: $e';
+    }
+  }
+
   Future<void> _importAll() async {
     if (_loading || _transferring) return;
     final service = context.read<GoProService>();
@@ -110,6 +126,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
           }
         },
       );
+      final sets = await _matchRigSets();
       if (mounted) {
         setState(() {
           _progress = report.complete ? 1 : _progress;
@@ -118,6 +135,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
             '${report.complete ? 'Import complete' : 'Import needs attention'}: ${report.imported} local files.',
             for (final c in report.cameras)
               '${c.cameraName}: ${c.imported}/${c.found}${c.error == null ? '' : ' — ${c.error}'}',
+            ?sets,
             ..._whereFiles(service.galleryFailures.length),
           ].join('\n');
         });
@@ -182,6 +200,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
           }
         },
       );
+      final sets = await _matchRigSets();
       if (mounted) {
         setState(() {
           _progress = count == items.length ? 1 : _progress;
@@ -189,6 +208,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
           _status = [
             '$count of ${items.length} originals available locally. '
                 '${count == items.length ? 'Import complete.' : 'Retry to fetch missing files.'}',
+            ?sets,
             ..._whereFiles(service.galleryFailures.length),
           ].join('\n');
         });
