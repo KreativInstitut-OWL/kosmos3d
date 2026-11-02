@@ -207,6 +207,50 @@ RigSetResult pairPhotosByTime(
   );
 }
 
+/// Wall-clock windows of a project's capture runs (with margins for camera
+/// clock offset and processing), used to import only this project's files.
+Future<List<({DateTime start, DateTime end})>> projectRunWindows(
+  String capturesDirectory,
+) async {
+  final log = File(
+    '${Directory(capturesDirectory).parent.path}/shutter_events.jsonl',
+  );
+  if (!await log.exists()) return [];
+  final events = <RigEvent>[];
+  for (final line in await log.readAsLines()) {
+    try {
+      final json = jsonDecode(line) as Map<String, dynamic>;
+      final time = DateTime.tryParse('${json['timestamp']}');
+      if (time != null) {
+        events.add(
+          RigEvent(wallClock(time), run: json['run_started_utc'] as String?),
+        );
+      }
+    } catch (_) {}
+  }
+  final result = pairPhotosByTime(events, const []);
+  final windows = <({DateTime start, DateTime end})>[];
+  for (var r = 0; r <= (result.sets.isEmpty ? -1 : result.sets.last.run); r++) {
+    final times = result.sets.where((s) => s.run == r).map((s) => s.event);
+    if (times.isEmpty) continue;
+    windows.add((
+      start: times.first.subtract(const Duration(seconds: 10)),
+      end: times.last.add(const Duration(minutes: 2)),
+    ));
+  }
+  return windows;
+}
+
+/// Camera file time (`mod`, camera wall clock) inside any of [windows].
+bool inRunWindows(
+  DateTime? cameraTime,
+  List<({DateTime start, DateTime end})> windows,
+) {
+  if (cameraTime == null) return false;
+  final wall = cameraTime.toUtc();
+  return windows.any((w) => !wall.isBefore(w.start) && !wall.isAfter(w.end));
+}
+
 /// Reads a project's shutter log and imported photos, writes rig_sets.json
 /// next to the log and returns the result (null without a log or photos).
 Future<RigSetResult?> writeRigSets(String capturesDirectory) async {

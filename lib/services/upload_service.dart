@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'system_settings_service.dart';
 
 typedef ServerConfigLoader = Future<Map<String, String>> Function();
 
@@ -72,6 +73,11 @@ class UploadService extends ChangeNotifier {
   }
 
   Future<bool> testConnection() async {
+    // A joined camera Wi-Fi routes all app traffic to the camera, which has
+    // no internet. Hand traffic back to the normal phone network first.
+    try {
+      await SystemSettingsService.releaseCameraWifi();
+    } catch (_) {}
     final client = http.Client();
     try {
       final config = await _config();
@@ -157,6 +163,11 @@ class UploadService extends ChangeNotifier {
     _progress = 0;
     _statusMessage = 'Preparing files…';
     notifyListeners();
+    // A joined camera Wi-Fi routes all app traffic to the camera, which has
+    // no internet. Hand traffic back to the normal phone network first.
+    try {
+      await SystemSettingsService.releaseCameraWifi();
+    } catch (_) {}
     try {
       final config = await _config();
       final base = _base(config);

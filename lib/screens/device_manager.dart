@@ -1,5 +1,6 @@
 import '../l10n/app_text.dart';
 import 'rig_settings_screen.dart';
+import 'rig_control_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,12 +21,45 @@ class DeviceManagerScreen extends StatefulWidget {
 }
 
 class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
+  bool _connectingAll = false;
+
+  /// Runs a camera action and shows its error (or [done]) instead of failing
+  /// silently.
+  Future<void> _guard(Future<void> Function() action, {String? done}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    try {
+      await action();
+      if (done != null) {
+        messenger.showSnackBar(SnackBar(content: AppText(done)));
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: AppText('$e'), backgroundColor: errorColor),
+      );
+    }
+  }
+
+  Future<void> _connectAll(GoProService goPro) async {
+    setState(() => _connectingAll = true);
+    try {
+      final failures = await goPro.connectAll();
+      if (mounted && failures.isNotEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: AppText(failures.join('\n'))));
+      }
+    } finally {
+      if (mounted) setState(() => _connectingAll = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final goPro = context.read<GoProService>();
-      if (!goPro.isScanning && goPro.devices.isEmpty) {
+      if (!goPro.isScanning && !goPro.devices.any((d) => d.isConnected)) {
         _checkLocationAndScan(goPro);
       }
     });
@@ -71,7 +105,7 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: AppText(settings.translate('device_manager')),
+        title: const AppText('Cameras'),
         actions: [
           IconButton(
             tooltip: 'Live viewfinder',
@@ -89,6 +123,15 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
               ),
             ),
           ),
+          if (cameras.any((c) => c.isConnected))
+            IconButton(
+              icon: const Icon(Icons.settings_remote),
+              tooltip: 'Rig control',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const RigControlScreen()),
+              ),
+            ),
           if (cameras.any((c) => c.isConnected))
             IconButton(
               icon: const Icon(Icons.tune),
@@ -326,16 +369,31 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                         ],
                       ),
                     )
-                  : ListView.builder(
+                  : ListView(
                       physics: const BouncingScrollPhysics(
                         parent: AlwaysScrollableScrollPhysics(),
                       ),
                       padding: const EdgeInsets.all(16),
-                      itemCount: cameras.length,
-                      itemBuilder: (context, index) {
-                        final cam = cameras[index];
-                        return _buildCameraCard(context, cam, goPro, settings);
-                      },
+                      children: [
+                        if (cameras.where((c) => !c.isConnected).length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: FilledButton.icon(
+                              onPressed: _connectingAll
+                                  ? null
+                                  : () => _connectAll(goPro),
+                              icon: const Icon(Icons.bluetooth_connected),
+                              label: AppText(
+                                'Connect all ({n})'.replaceAll(
+                                  '{n}',
+                                  '${cameras.where((c) => !c.isConnected).length}',
+                                ),
+                              ),
+                            ),
+                          ),
+                        for (final cam in cameras)
+                          _buildCameraCard(context, cam, goPro, settings),
+                      ],
                     ),
             ),
           ],
@@ -361,18 +419,27 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
           children: [
             // ─── Header: Name + Connection Status ───
             InkWell(
-              onTap: () {
-                if (!cam.isConnected) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: AppText(
-                        '${settings.translate('connecting')} ${cam.name}...',
-                      ),
+              onTap: cam.isConnected
+                  ? null
+                  : () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: AppText(
+                            '${settings.translate('connecting')} ${cam.name}...',
+                          ),
+                        ),
+                      );
+                      _guard(
+                        () => goPro.connectToDevice(cam.id),
+                        done: '${cam.name} connected',
+                      );
+                    },
+              onLongPress: cam.isConnected
+                  ? null
+                  : () => _guard(
+                      () => goPro.forgetCamera(cam.id),
+                      done: '${cam.name} removed from this phone',
                     ),
-                  );
-                  goPro.connectToDevice(cam.id);
-                }
-              },
               borderRadius: BorderRadius.circular(8),
               child: Row(
                 children: [
@@ -442,7 +509,7 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                             AppText(
                               cam.isConnected
                                   ? 'Connected (BLE)'
-                                  : 'Tap to connect',
+                                  : 'Tap to connect or wake · hold to forget',
                               style: TextStyle(
                                 color: cam.isConnected
                                     ? primaryColor
@@ -527,104 +594,57 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
               // Action buttons
               Row(
                 children: [
-                  // Photo Mode
                   _buildActionButton(
                     icon: Icons.photo_camera,
                     label: 'Photo',
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        await goPro.setPhotoMode(cam.id);
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: AppText('$e')),
-                        );
-                        return;
-                      }
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: AppText('Switched to Photo mode'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
+                    onTap: () => _guard(
+                      () => goPro.selectMode(cam.id, 16),
+                      done: 'Switched to Photo mode',
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  // Video Mode
                   _buildActionButton(
                     icon: Icons.videocam,
                     label: 'Video',
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        await goPro.setVideoMode(cam.id);
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: AppText('$e')),
-                        );
-                        return;
-                      }
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: AppText('Switched to Video mode'),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
+                    onTap: () => _guard(
+                      () => goPro.selectMode(cam.id, 12),
+                      done: 'Switched to Video mode',
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  // Shutter
                   _buildActionButton(
-                    icon: Icons.circle,
+                    icon: cam.isRecording ? Icons.stop : Icons.circle,
                     label: cam.isRecording ? 'Stop' : 'Shutter',
                     color: cam.isRecording ? Colors.redAccent : null,
-                    onTap: () async {
-                      try {
-                        await goPro.toggleRecording(cam.id, !cam.isRecording);
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: AppText('$e')));
-                        }
-                      }
-                    },
+                    onTap: () => _guard(
+                      () => goPro.toggleRecording(cam.id, !cam.isRecording),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  // Settings
                   _buildActionButton(
-                    icon: Icons.tune,
-                    label: 'Settings',
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => CameraSettingsDialog(
-                          camera: cam,
-                          goProService: goPro,
-                          settingsProvider: settings,
-                        ),
-                      );
-                    },
+                    icon: Icons.settings_remote,
+                    label: 'Controls',
+                    color: primaryColor,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => RigControlScreen(only: cam.id),
+                      ),
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              // Secondary actions row
               Row(
                 children: [
                   _buildActionButton(
                     icon: Icons.link_off,
                     label: settings.translate('disconnect'),
                     color: Colors.orange,
-                    onTap: () => goPro.disconnectDevice(cam.id),
+                    onTap: () =>
+                        _guard(() => goPro.releaseAndDisconnect(cam.id)),
                   ),
                   const SizedBox(width: 8),
-                  // Formatting is left to the camera: Open GoPro has no
-                  // verified format command, so no button pretends otherwise.
                   _buildActionButton(
                     icon: Icons.key,
                     label: 'Wi-Fi password',
@@ -636,77 +656,12 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
-                    icon: Icons.power_settings_new,
-                    label: settings.translate('power_off'),
-                    color: Colors.redAccent,
-                    onTap: () => goPro.powerOff(cam.id),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Third row: WiFi, GPS, Locate
-              Row(
-                children: [
-                  _buildActionButton(
-                    icon: Icons.wifi,
-                    label: 'WiFi AP',
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      await goPro.enableWifi(cam.id);
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: AppText(
-                              'WiFi AP enabled — connect your phone to GoPro WiFi to download media',
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.gps_fixed,
-                    label: 'GPS On',
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      await goPro.setGps(cam.id, true);
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: AppText(
-                              'GPS enabled — positions are logged; original photo EXIF is unchanged',
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.volume_up,
-                    label: 'Locate',
-                    onTap: () => goPro.locateCamera(cam.id, true),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.bookmark_add,
-                    label: 'HiLight',
-                    onTap: () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      await goPro.addHiLightTag(cam.id);
-                      if (mounted) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: AppText('HiLight tag added'),
-                            backgroundColor: Colors.green,
-                            duration: Duration(seconds: 1),
-                          ),
-                        );
-                      }
-                    },
+                    icon: Icons.bedtime_outlined,
+                    label: 'Sleep',
+                    onTap: () => _guard(
+                      () => goPro.sleepCamera(cam.id),
+                      done: 'Camera sleeps. Tap it to wake it.',
+                    ),
                   ),
                 ],
               ),
@@ -764,6 +719,7 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
     VoidCallback? onTap,
     Color? color,
   }) {
+    final base = Theme.of(context).colorScheme.onSurface;
     return Expanded(
       child: InkWell(
         onTap: onTap,
@@ -771,212 +727,30 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: (color ?? Colors.white).withValues(alpha: 0.06),
+            color: (color ?? base).withValues(alpha: 0.06),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: (color ?? Colors.white).withValues(alpha: 0.15),
-            ),
+            border: Border.all(color: (color ?? base).withValues(alpha: 0.15)),
           ),
           child: Column(
             children: [
-              Icon(icon, size: 18, color: color ?? Colors.white70),
+              Icon(
+                icon,
+                size: 18,
+                color: color ?? base.withValues(alpha: 0.75),
+              ),
               const SizedBox(height: 2),
               AppText(
                 label,
-                style: TextStyle(color: color ?? Colors.white54, fontSize: 10),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color ?? base.withValues(alpha: 0.65),
+                  fontSize: 10,
+                ),
               ),
             ],
           ),
         ),
       ),
     );
-  }
-}
-
-// ─── CAMERA SETTINGS DIALOG ─────────────────────────────────
-
-class CameraSettingsDialog extends StatefulWidget {
-  final CameraDevice camera;
-  final GoProService goProService;
-  final SettingsProvider settingsProvider;
-
-  const CameraSettingsDialog({
-    super.key,
-    required this.camera,
-    required this.goProService,
-    required this.settingsProvider,
-  });
-
-  @override
-  State<CameraSettingsDialog> createState() => _CameraSettingsDialogState();
-}
-
-class _CameraSettingsDialogState extends State<CameraSettingsDialog> {
-  late Map<String, String> _settings;
-  bool _isApplying = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _settings = Map.from(widget.camera.currentSettings);
-  }
-
-  Future<void> _applyAllSettings() async {
-    if (_isApplying) return;
-    setState(() => _isApplying = true);
-    try {
-      await widget.goProService.applySettingsToCurrentMode(
-        widget.camera.id,
-        _settings,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: AppText('Supported settings verified on camera'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: AppText('$e')));
-      }
-    } finally {
-      if (mounted) setState(() => _isApplying = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: const Color(0xFF1E1E1E),
-      title: Row(
-        children: [
-          Expanded(
-            child: AppText(
-              widget.camera.name,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          // Apply all button
-          TextButton.icon(
-            onPressed: _isApplying ? null : _applyAllSettings,
-            icon: _isApplying
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(
-                    Icons.send,
-                    size: 16,
-                    color: Theme.of(context).primaryColor,
-                  ),
-            label: AppText(
-              'Apply',
-              style: TextStyle(
-                color: Theme.of(context).primaryColor,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _settings.keys.map((key) {
-            final options = _getOptionsForKey(key);
-            final currentValue = options.contains(_settings[key])
-                ? _settings[key]
-                : options.first;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 95,
-                    child: AppText(
-                      key,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          dropdownColor: const Color(0xFF2E2E2E),
-                          value: currentValue,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                          ),
-                          isExpanded: true,
-                          items: options
-                              .map(
-                                (opt) => DropdownMenuItem(
-                                  value: opt,
-                                  child: AppText(opt),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _settings[key] = val);
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: AppText(
-            widget.settingsProvider.translate('close'),
-            style: TextStyle(color: Theme.of(context).primaryColor),
-          ),
-        ),
-      ],
-    );
-  }
-
-  List<String> _getOptionsForKey(String key) {
-    switch (key) {
-      case 'Resolution':
-        return ['1080p', '2.7K', '4K', '5.3K'];
-      case 'FPS':
-        return ['24', '30', '60', '120'];
-      case 'Lens':
-        return ['Linear', 'Wide', 'SuperView'];
-      case 'ISO Max':
-        return ['100', '200', '400', '800', '1600'];
-      case 'Shutter':
-        return ['Auto', '1/60', '1/120', '1/240', '1/480'];
-      case 'White Balance':
-        return ['Auto', '3200K', '4000K', '5500K', '6500K'];
-      case 'Bitrate':
-        return ['Standard', 'High'];
-      default:
-        return [_settings[key] ?? ''];
-    }
   }
 }

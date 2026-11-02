@@ -29,6 +29,25 @@ class GoProMediaTransferDialog extends StatefulWidget {
 }
 
 class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
+  late final GoProService _service = context.read<GoProService>();
+
+  @override
+  void initState() {
+    super.initState();
+    _service; // resolve while the context is active
+    _loadWindows();
+  }
+
+  @override
+  void dispose() {
+    // Browsing or importing may have joined a camera Wi-Fi, which routes all
+    // app traffic to the camera. Give the phone its normal network back.
+    if (!_service.isSyncingMedia) {
+      SystemSettingsService.releaseCameraWifi().catchError((_) {});
+    }
+    super.dispose();
+  }
+
   bool _loading = false, _transferring = false, _gallery = true;
   double _progress = 0;
   String _status =
@@ -103,7 +122,18 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
     }
   }
 
-  Future<void> _importAll() async {
+  /// Capture windows of the project this dialog imports into (empty for
+  /// loose imports or projects without a shutter log).
+  List<({DateTime start, DateTime end})> _windows = [];
+
+  Future<void> _loadWindows() async {
+    final captures = widget.projectCapturesPath;
+    if (captures == null) return;
+    final windows = await projectRunWindows(captures);
+    if (mounted) setState(() => _windows = windows);
+  }
+
+  Future<void> _importAll({bool everything = false}) async {
     if (_loading || _transferring) return;
     final service = context.read<GoProService>();
     setState(() {
@@ -114,9 +144,15 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
       final root = await getApplicationDocumentsDirectory();
       final target =
           widget.projectCapturesPath ?? '${root.path}/kosmos3d_downloads';
+      final windows = everything
+          ? const <({DateTime start, DateTime end})>[]
+          : _windows;
       final report = await service.importAllConnectedCameras(
         target,
         saveToGallery: _gallery,
+        include: windows.isEmpty
+            ? null
+            : (item) => inRunWindows(item.modifiedTime, windows),
         onStatus: (message) {
           if (mounted) {
             setState(() {
@@ -163,7 +199,12 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
       setState(() {
         _items = items;
         _selected.clear();
-        _selected.addAll(List.generate(items.length, (i) => i));
+        _selected.addAll([
+          for (var i = 0; i < items.length; i++)
+            if (_windows.isEmpty ||
+                inRunWindows(items[i].modifiedTime, _windows))
+              i,
+        ]);
         _status = items.isEmpty
             ? 'No readable media found. Connect a camera by Bluetooth and join its Wi-Fi.'
             : '${items.length} files available. Select the originals to import.';
@@ -288,11 +329,20 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
                   onPressed: busy || cameras.isEmpty ? null : _importAll,
                   icon: const Icon(Icons.download_for_offline),
                   label: AppText(
-                    cameras.length == 1
+                    _windows.isNotEmpty
+                        ? 'Import this project\'s files'
+                        : cameras.length == 1
                         ? 'Import all files from 1 camera'
                         : 'Import all files from ${cameras.length} cameras',
                   ),
                 ),
+                if (_windows.isNotEmpty)
+                  TextButton(
+                    onPressed: busy || cameras.isEmpty
+                        ? null
+                        : () => _importAll(everything: true),
+                    child: const AppText('Import everything on the cards'),
+                  ),
                 const AppText(
                   'Cameras transfer one at a time. Approve each Wi-Fi connection when asked.',
                 ),

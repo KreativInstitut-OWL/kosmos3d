@@ -9,6 +9,9 @@ import '../models/scan_project.dart';
 import '../providers/settings_provider.dart';
 import '../services/project_service.dart';
 import '../services/upload_service.dart';
+import '../services/cloud_storage_service.dart';
+import '../widgets/storage_upload_dialog.dart';
+import 'settings.dart' show CloudStorageDialog;
 import '../services/system_settings_service.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/gopro_media_transfer_dialog.dart';
@@ -28,11 +31,161 @@ class _TransferHubScreenState extends State<TransferHubScreen> {
   List<File> _files = [];
   int _bytes = 0;
   int _refreshGeneration = 0;
+  String? _storageTarget;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _loadStorageTarget();
   }
+
+  Future<void> _loadStorageTarget() async {
+    final c = await context.read<CloudStorageService>().getDisplayCredentials();
+    final endpoint = c['endpoint'] ?? '';
+    final host =
+        Uri.tryParse(
+          endpoint.contains('://') ? endpoint : 'https://$endpoint',
+        )?.host ??
+        '';
+    if (!mounted) return;
+    setState(
+      () => _storageTarget = (c['bucketName'] ?? '').isEmpty
+          ? null
+          : '${c['bucketName']}/${c['prefix']} · $host',
+    );
+  }
+
+  /// A receiver address that can work: 127.0.0.1 is the phone itself.
+  static bool _isReceiverSet(String url) {
+    final host = Uri.tryParse(url)?.host ?? '';
+    return host.isNotEmpty && !['127.0.0.1', 'localhost', '::1'].contains(host);
+  }
+
+  void _snack(String text) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: AppText(text)));
+
+  Future<void> _configureStorage() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const CloudStorageDialog(),
+    );
+    await _loadStorageTarget();
+  }
+
+  Future<void> _uploadToStorage(ScanProject? project) async {
+    if (project != null) {
+      await showStorageUploadDialog(
+        context,
+        projectId: project.id,
+        projectName: project.name,
+      );
+      return;
+    }
+    await context.read<CloudStorageService>().uploadFiles(
+      _files.where((f) => !f.path.endsWith('.receipt.json')).toList(),
+      projectName: 'imports',
+    );
+  }
+
+  Widget _storageDestination(
+    CloudStorageService cloud,
+    ScanProject? selected,
+    bool busy,
+  ) => _destination(
+    CupertinoIcons.cloud_upload,
+    'Send to storage server',
+    cloud.isConfigured
+        ? (_storageTarget ?? 'Storage server ready')
+        : 'Any S3-compatible storage: Backblaze B2, AWS S3, Wasabi, Cloudflare R2, MinIO. Set it up once.',
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!cloud.isConfigured)
+          FilledButton.icon(
+            onPressed: busy ? null : _configureStorage,
+            icon: const Icon(Icons.tune),
+            label: const AppText('Set up storage server'),
+          )
+        else
+          Row(
+            children: [
+              TextButton(
+                onPressed: busy ? null : _configureStorage,
+                child: const AppText('Change'),
+              ),
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final ok = await cloud.testConnection();
+                        if (mounted) {
+                          _snack(
+                            ok
+                                ? 'Storage server reachable'
+                                : cloud.lastError ?? 'Connection failed',
+                          );
+                        }
+                      },
+                child: const AppText('Test'),
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: busy || _files.isEmpty
+                    ? null
+                    : () => _uploadToStorage(selected),
+                icon: const Icon(Icons.cloud_upload_outlined),
+                label: const AppText('Upload'),
+              ),
+            ],
+          ),
+        if (selected == null && cloud.statusMessage.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _statusCard(
+            cloud.statusMessage,
+            cloud.progress,
+            cloud.isUploading ? null : cloud.lastError,
+            cloud.isUploading ? cloud.cancelUpload : null,
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _statusCard(
+    String status,
+    double progress,
+    String? error,
+    VoidCallback? onCancel,
+  ) => GlassCard(
+    padding: const EdgeInsets.all(18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppText(status),
+        const SizedBox(height: 12),
+        LinearProgressIndicator(
+          value: progress,
+          minHeight: 6,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: AppText(
+              error,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        if (onCancel != null)
+          TextButton(
+            onPressed: onCancel,
+            child: const AppText('Cancel transfer'),
+          ),
+      ],
+    ),
+  );
 
   Future<Directory> _folder() async {
     final root = await getApplicationDocumentsDirectory();
@@ -188,10 +341,13 @@ class _TransferHubScreenState extends State<TransferHubScreen> {
                     parsed.host.isEmpty ||
                     parsed.hasQuery ||
                     parsed.hasFragment ||
-                    parsed.userInfo.isNotEmpty) {
+                    parsed.userInfo.isNotEmpty ||
+                    ['127.0.0.1', 'localhost', '::1'].contains(parsed.host)) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: AppText('Enter a valid HTTP(S) server address.'),
+                      content: AppText(
+                        'Enter the HTTP(S) address of your computer, e.g. http://192.168.1.20:8787. 127.0.0.1 is the phone itself.',
+                      ),
                     ),
                   );
                   return;
@@ -220,13 +376,14 @@ class _TransferHubScreenState extends State<TransferHubScreen> {
   Widget build(BuildContext context) {
     final projects = context.watch<ProjectService>().projects;
     final upload = context.watch<UploadService>();
+    final cloud = context.watch<CloudStorageService>();
     final settings = context.watch<SettingsProvider>();
     ScanProject? project;
     for (final candidate in projects) {
       if (candidate.id == _projectId) project = candidate;
     }
     final selected = project;
-    final busy = _localBusy || upload.isUploading;
+    final busy = _localBusy || upload.isUploading || cloud.isUploading;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Scaffold(
       appBar: AppBar(
@@ -359,98 +516,69 @@ class _TransferHubScreenState extends State<TransferHubScreen> {
               label: const AppText('Save all files'),
             ),
           ),
-          _destination(
-            CupertinoIcons.cloud_upload,
-            'Send to server',
-            settings.serverUrl.isEmpty
-                ? 'Choose your own server destination.'
-                : settings.serverUrl,
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: busy ? null : _configure,
-                  icon: const Icon(Icons.tune),
-                  label: const AppText('Configure destination'),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    TextButton(
-                      onPressed: busy
-                          ? null
-                          : () async {
-                              final ok = await upload.testConnection();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: AppText(
-                                      ok
-                                          ? 'Server is reachable'
-                                          : upload.lastError ??
-                                                'Connection failed',
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                      child: const AppText('Test connection'),
-                    ),
-                    const Spacer(),
-                    FilledButton(
-                      onPressed:
-                          busy || _files.isEmpty || settings.serverUrl.isEmpty
-                          ? null
-                          : () {
-                              if (selected != null) {
-                                upload.uploadProject(
-                                  selected.id,
-                                  selected.name,
-                                );
-                              } else {
-                                upload.uploadFiles(
-                                  List<File>.of(_files),
-                                  projectName: 'Imports',
-                                );
-                              }
-                            },
-                      child: const AppText('Send all'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (upload.statusMessage.isNotEmpty)
-            GlassCard(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          _storageDestination(cloud, selected, busy),
+          if (_isReceiverSet(settings.serverUrl))
+            _destination(
+              CupertinoIcons.desktopcomputer,
+              'KOSMOS receiver (your computer)',
+              settings.serverUrl,
+              Row(
                 children: [
-                  AppText(upload.statusMessage),
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(
-                    value: upload.progress,
-                    minHeight: 6,
-                    borderRadius: BorderRadius.circular(4),
+                  TextButton(
+                    onPressed: busy ? null : _configure,
+                    child: const AppText('Change'),
                   ),
-                  if (upload.lastError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: AppText(
-                        upload.lastError!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  if (upload.isUploading)
-                    TextButton(
-                      onPressed: upload.cancel,
-                      child: const AppText('Cancel transfer'),
-                    ),
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            final ok = await upload.testConnection();
+                            if (context.mounted) {
+                              _snack(
+                                ok
+                                    ? 'Server is reachable'
+                                    : upload.lastError ?? 'Connection failed',
+                              );
+                            }
+                          },
+                    child: const AppText('Test'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: busy || _files.isEmpty
+                        ? null
+                        : () {
+                            if (selected != null) {
+                              upload.uploadProject(selected.id, selected.name);
+                            } else {
+                              upload.uploadFiles(
+                                List<File>.of(_files),
+                                projectName: 'Imports',
+                              );
+                            }
+                          },
+                    child: const AppText('Send all'),
+                  ),
                 ],
               ),
+            )
+          else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: busy ? null : _configure,
+                icon: const Icon(CupertinoIcons.desktopcomputer, size: 18),
+                label: const AppText(
+                  'Send to the KOSMOS receiver on a computer',
+                ),
+              ),
+            ),
+          if (upload.statusMessage.isNotEmpty)
+            _statusCard(
+              upload.statusMessage,
+              upload.progress,
+              upload.lastError,
+              upload.isUploading ? upload.cancel : null,
             ),
           if (_localStatus.isNotEmpty)
             Padding(
@@ -458,7 +586,7 @@ class _TransferHubScreenState extends State<TransferHubScreen> {
               child: AppText(_localStatus),
             ),
           AppText(
-            'Keep the app open during transfers. Interrupted KOSMOS server uploads can be retried; completed files are checked before sending again.',
+            'Keep the app open during transfers. An interrupted upload continues on the next try: files already on the server are skipped.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
         ],

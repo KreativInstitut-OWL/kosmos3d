@@ -1,5 +1,6 @@
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../widgets/glass_card.dart';
 import 'device_manager.dart';
@@ -462,7 +463,7 @@ class SettingsScreen extends StatelessWidget {
                       builder: (_) => const HotspotDialog(),
                     ),
                   ),
-                  const Divider(height: 1, color: Colors.white10),
+                  Divider(height: 1, color: context.ink(0.1)),
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -615,7 +616,9 @@ class SettingsScreen extends StatelessWidget {
                       'KOSMOS 3D',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    subtitle: AppText('Version 2.0.0 · Sam Wiemann · kreativ.institute'),
+                    subtitle: AppText(
+                      'Version 2.0.0 · Sam Wiemann · kreativ.institute',
+                    ),
                   ),
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(
@@ -673,7 +676,7 @@ class SettingsScreen extends StatelessWidget {
             const SizedBox(width: 8),
             AppText(
               preset.name,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
+              style: TextStyle(color: context.ink(), fontSize: 16),
             ),
           ],
         ),
@@ -688,15 +691,15 @@ class SettingsScreen extends StatelessWidget {
                     children: [
                       AppText(
                         e.key,
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: context.ink(0.54),
                           fontSize: 13,
                         ),
                       ),
                       AppText(
                         e.value,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: context.ink(),
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
@@ -743,9 +746,9 @@ class SettingsScreen extends StatelessWidget {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1A1A1A),
-          title: const AppText(
+          title: AppText(
             'Create Preset',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: context.ink()),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -753,10 +756,10 @@ class SettingsScreen extends StatelessWidget {
               children: [
                 TextField(
                   controller: nameCtrl,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  style: TextStyle(color: context.ink()),
+                  decoration: InputDecoration(
                     labelText: 'Preset Name',
-                    labelStyle: TextStyle(color: Colors.white54),
+                    labelStyle: TextStyle(color: context.ink(0.54)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -856,7 +859,7 @@ class SettingsScreen extends StatelessWidget {
             width: 90,
             child: AppText(
               label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
           Expanded(
@@ -865,7 +868,7 @@ class SettingsScreen extends StatelessWidget {
                 value: value,
                 dropdownColor: const Color(0xFF2E2E2E),
                 isExpanded: true,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style: TextStyle(color: Colors.white, fontSize: 13),
                 items: options
                     .map((o) => DropdownMenuItem(value: o, child: AppText(o)))
                     .toList(),

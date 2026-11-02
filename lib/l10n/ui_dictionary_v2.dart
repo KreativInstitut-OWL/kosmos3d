@@ -1,6 +1,125 @@
 /// German strings added in v2. `{name}` placeholders match any text at runtime,
 /// so messages built with interpolation translate as well.
 const germanV2 = <String, String>{
+  'Rig control': 'Rig-Steuerung',
+  'Refresh status': 'Status aktualisieren',
+  'Connect a camera first. Sleeping cameras wake when you tap Connect all in Cameras.':
+      'Zuerst eine Kamera verbinden. Schlafende Kameras wachen auf, wenn du unter Kameras auf „Alle verbinden“ tippst.',
+  'Mode and shutter': 'Modus und Auslöser',
+  'Time-lapse': 'Zeitraffer',
+  'Start': 'Start',
+  'HiLight': 'HiLight',
+  'For scans use a project: it verifies settings and logs every shot.':
+      'Für Scans ein Projekt nutzen: Es prüft die Einstellungen und protokolliert jedes Foto.',
+  'Camera': 'Kamera',
+  'All settings': 'Alle Einstellungen',
+  'Sync clocks': 'Uhren stellen',
+  'Wi-Fi on': 'WLAN an',
+  'Wi-Fi off': 'WLAN aus',
+  'GPS on': 'GPS an',
+  'GPS off': 'GPS aus',
+  'Keep cameras awake': 'Kameras wach halten',
+  'Auto power-off is set to Never while connected and restored when you disconnect or put a camera to sleep.':
+      'Die automatische Abschaltung steht während der Verbindung auf „Nie“ und wird beim Trennen oder Schlafenlegen wiederhergestellt.',
+  'SD card': 'SD-Karte',
+  'Erase all files': 'Alle Dateien löschen',
+  'Format (Labs QR)': 'Formatieren (Labs-QR)',
+  'Erase deletes all media over the camera Wi-Fi and checks the card is empty. Android asks once per camera to join its Wi-Fi.':
+      'Löschen entfernt alle Medien über das Kamera-WLAN und prüft, ob die Karte leer ist. Android fragt pro Kamera einmal nach dem WLAN-Beitritt.',
+  'Power': 'Energie',
+  'Sleep': 'Schlafen',
+  'Power off': 'Ausschalten',
+  'Sleep keeps Bluetooth listening, so the app can wake the camera again.':
+      'Im Schlafmodus bleibt Bluetooth aktiv, die App kann die Kamera wieder wecken.',
+  'Low-level format (GoPro Labs)': 'Formatieren (GoPro Labs)',
+  'Only needed for a corrupted card. Requires GoPro Labs firmware; each camera asks for a confirmation on its own screen.':
+      'Nur bei beschädigter Karte nötig. Benötigt GoPro-Labs-Firmware; jede Kamera fragt auf ihrem Display nach einer Bestätigung.',
+  'Erase': 'Löschen',
+  'Type {word} to confirm': 'Zum Bestätigen {word} eingeben',
+  'Delete every photo and video on: {names}? Import what you need first. This cannot be undone.':
+      'Alle Fotos und Videos löschen auf: {names}? Vorher importieren, was du brauchst. Das lässt sich nicht rückgängig machen.',
+  'Erasing (joins each camera Wi-Fi)':
+      'Löschen (verbindet sich mit jedem Kamera-WLAN)',
+  'Cards are empty': 'Karten sind leer',
+  'Sleeping. Connect all in Cameras wakes them.':
+      'Schlafen. „Alle verbinden“ unter Kameras weckt sie.',
+  'Powered-off cameras must be switched on by hand. Use Sleep to wake them from the app later.':
+      'Ausgeschaltete Kameras musst du von Hand einschalten. Mit „Schlafen“ kann die App sie später wecken.',
+  'Select at least one connected camera':
+      'Mindestens eine verbundene Kamera auswählen',
+  '{label}: done': '{label}: erledigt',
+  'Video mode': 'Videomodus',
+  'Time-lapse mode': 'Zeitraffermodus',
+  'Starting': 'Starte',
+  'Stopping': 'Stoppe',
+  'Setting clocks': 'Stelle Uhren',
+  'Camera Wi-Fi on': 'Kamera-WLAN an',
+  'Camera Wi-Fi off': 'Kamera-WLAN aus',
+  'Keep awake': 'Wach halten',
+  '{n} photos left': 'noch {n} Fotos',
+  '{p} photos, {v} videos on card': '{p} Fotos, {v} Videos auf der Karte',
+  '{n} GB free': '{n} GB frei',
+  '{d} video': '{d} Video',
+  'GPS lock': 'GPS-Fix',
+  'No GPS lock': 'Kein GPS-Fix',
+  'Recording': 'Nimmt auf',
+  'Overheating': 'Überhitzt',
+  'Too cold': 'Zu kalt',
+  'Low battery': 'Akku schwach',
+  'SD: {state}': 'SD: {state}',
+  'Full': 'Voll',
+  'No card': 'Keine Karte',
+  'Format error': 'Formatfehler',
+  'Busy': 'Beschäftigt',
+  'Swapped': 'Gewechselt',
+  'Controls': 'Steuerung',
+  'Camera sleeps. Tap it to wake it.': 'Kamera schläft. Antippen zum Wecken.',
+  'Tap to connect or wake · hold to forget':
+      'Tippen zum Verbinden oder Wecken · halten zum Entfernen',
+  'Connect all ({n})': 'Alle verbinden ({n})',
+  '{name} connected': '{name} verbunden',
+  '{name} removed from this phone': '{name} von diesem Telefon entfernt',
+  'Switched to Photo mode': 'Auf Fotomodus umgeschaltet',
+  'Switched to Video mode': 'Auf Videomodus umgeschaltet',
+  'Stop the capture session first': 'Zuerst die Aufnahme beenden',
+  'Connect a camera first': 'Zuerst eine Kamera verbinden',
+  'HiLight works while the camera records video':
+      'HiLight funktioniert nur während einer Videoaufnahme',
+  'Camera Wi-Fi did not switch on': 'Kamera-WLAN hat sich nicht eingeschaltet',
+  'Camera Wi-Fi did not switch off': 'Kamera-WLAN hat sich nicht ausgeschaltet',
+  'Camera still reports files after erasing':
+      'Kamera meldet nach dem Löschen noch Dateien',
+  'Stop capture and imports first': 'Zuerst Aufnahme und Importe beenden',
+  'Send to storage server': 'An Speicherserver senden',
+  'Any S3-compatible storage: Backblaze B2, AWS S3, Wasabi, Cloudflare R2, MinIO. Set it up once.':
+      'Jeder S3-kompatible Speicher: Backblaze B2, AWS S3, Wasabi, Cloudflare R2, MinIO. Einmal einrichten.',
+  'Set up storage server': 'Speicherserver einrichten',
+  'Change': 'Ändern',
+  'Test': 'Testen',
+  'Storage server reachable': 'Speicherserver erreichbar',
+  'Storage server ready': 'Speicherserver bereit',
+  'Send to the KOSMOS receiver on a computer':
+      'An den KOSMOS-Empfänger auf einem Computer senden',
+  'Keep the app open during transfers. An interrupted upload continues on the next try: files already on the server are skipped.':
+      'App während der Übertragung geöffnet lassen. Ein unterbrochener Upload geht beim nächsten Versuch weiter: Dateien, die schon auf dem Server sind, werden übersprungen.',
+  'Enter the HTTP(S) address of your computer, e.g. http://192.168.1.20:8787. 127.0.0.1 is the phone itself.':
+      'HTTP(S)-Adresse deines Computers eingeben, z. B. http://192.168.1.20:8787. 127.0.0.1 ist das Telefon selbst.',
+  'Send to KOSMOS receiver': 'An KOSMOS-Empfänger senden',
+  'Sending to KOSMOS receiver…': 'Sende an KOSMOS-Empfänger…',
+  'Upload failed': 'Upload fehlgeschlagen',
+  'Import this project\'s files': 'Dateien dieses Projekts importieren',
+  'Import everything on the cards': 'Alles auf den Karten importieren',
+  'Matched by capture time: {a} of {b} photo sets complete.':
+      'Nach Aufnahmezeit zugeordnet: {a} von {b} Fotosätzen vollständig.',
+  'Matched by capture time: {a} of {b} photo sets complete, {c} photos without a set.':
+      'Nach Aufnahmezeit zugeordnet: {a} von {b} Fotosätzen vollständig, {c} Fotos ohne Satz.',
+  'Photo sets not matched: {e}': 'Fotosätze nicht zugeordnet: {e}',
+  'Set these targets on every camera, or show the ISO / white balance QR from Rig settings. The app cannot read them back.':
+      'Diese Zielwerte an jeder Kamera einstellen oder den ISO-/Weißabgleich-QR aus den Rig-Einstellungen zeigen. Die App kann sie nicht auslesen.',
+  'Import from cameras': 'Von Kameras importieren',
+  'Copies this project\'s originals from every camera over its Wi-Fi. Passwords are read over Bluetooth.':
+      'Kopiert die Originale dieses Projekts von jeder Kamera über ihr WLAN. Passwörter werden per Bluetooth gelesen.',
+  'Import originals': 'Originale importieren',
   'Interval Timing': 'Intervall-Takt',
   'Camera timer': 'Kamera-Timer',
   'App (confirmed)': 'App (bestätigt)',

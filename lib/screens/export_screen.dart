@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import '../widgets/storage_upload_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -10,6 +11,8 @@ import '../services/gopro_service.dart';
 import '../services/cloud_storage_service.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/camera_connection_status.dart';
+import '../widgets/gopro_media_transfer_dialog.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Screen that exports and displays all COLMAP / Gaussian Splatting files.
 /// Users can share/download individual files or the entire bundle.
@@ -94,35 +97,14 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
+  /// Imports this project's originals over the camera Wi-Fi.
   Future<void> _showDownloadDialog() async {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('WiFi Auto-Download', style: TextStyle(color: Colors.orangeAccent)),
-        content: const Text(
-          'To download media:\n\n'
-          '1. Connect your phone to the GoPro\'s WiFi network in Settings.\n'
-          '2. The app will automatically connect and pull all media via HTTP.\n\n'
-          'Would you like to start the download process?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Starting WiFi transfer from GoPros...')),
-              );
-              // In a full implementation, this would trigger HTTP GET requests
-              // to http://10.5.5.9:8080/videos/DCIM/ for each camera.
-            },
-            child: const Text('Start Download', style: TextStyle(color: Colors.black)),
-          ),
-        ],
-      ),
+    final root = await getApplicationDocumentsDirectory();
+    if (!mounted) return;
+    await GoProMediaTransferDialog.show(
+      context,
+      projectCapturesPath:
+          '${root.path}/kosmos3d_projects/${widget.project.id}/captures',
     );
   }
 
@@ -131,7 +113,6 @@ class _ExportScreenState extends State<ExportScreen> {
     final primaryColor = Theme.of(context).primaryColor;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0A),
       appBar: AppBar(
         title: const Text('Export & Download'),
         actions: [
@@ -151,124 +132,191 @@ class _ExportScreenState extends State<ExportScreen> {
                 children: [
                   CircularProgressIndicator(color: primaryColor),
                   const SizedBox(height: 16),
-                  const Text('Generating export files...',
-                      style: TextStyle(color: Colors.white70)),
+                  Text(
+                    'Generating export files...',
+                    style: TextStyle(color: context.ink(0.7)),
+                  ),
                   const SizedBox(height: 8),
-                  const Text('COLMAP • transforms.json • trajectory.csv',
-                      style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  Text(
+                    'COLMAP • transforms.json • trajectory.csv',
+                    style: TextStyle(color: context.ink(0.38), fontSize: 12),
+                  ),
                 ],
               ),
             )
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
-                      const SizedBox(height: 16),
-                      Text('Export failed', style: TextStyle(color: Colors.white.withValues(alpha: 0.7))),
-                      const SizedBox(height: 8),
-                      Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(onPressed: _runExport, child: const Text('Retry')),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: Colors.redAccent,
                   ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // ─── Summary Card ───
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [primaryColor.withValues(alpha: 0.15), Colors.transparent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: primaryColor.withValues(alpha: 0.2)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.check_circle, color: primaryColor, size: 20),
-                              const SizedBox(width: 8),
-                              Text('Export Complete',
-                                  style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text('Project: ${widget.project.name}',
-                              style: const TextStyle(color: Colors.white, fontSize: 14)),
-                          const SizedBox(height: 4),
-                          Text('${_files.length} files generated',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13)),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 4,
-                            children: [
-                              _compatChip('COLMAP'),
-                              _compatChip('3DGS'),
-                              _compatChip('NeRF'),
-                              _compatChip('Nerfstudio'),
-                              _compatChip('Metashape'),
-                            ],
-                          ),
-                        ],
-                      ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Export failed',
+                    style: TextStyle(color: context.ink(0.7)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _error!,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 12,
                     ),
-                    const SizedBox(height: 16),
-
-                    // ─── Auto-Download (WiFi) ───
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.2)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _runExport,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // ─── Summary Card ───
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        primaryColor.withValues(alpha: 0.15),
+                        Colors.transparent,
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: primaryColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.wifi, color: Colors.orangeAccent, size: 20),
-                              SizedBox(width: 8),
-                              Text('Auto-Download Media',
-                                  style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                            ],
+                          Icon(
+                            Icons.check_circle,
+                            color: primaryColor,
+                            size: 20,
                           ),
-                          const SizedBox(height: 8),
-                          Text('Connect to your GoPro\'s WiFi network to wirelessly download the captured photos and videos directly to your phone.',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13, height: 1.4)),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orangeAccent,
-                                foregroundColor: Colors.black,
-                              ),
-                              onPressed: _showDownloadDialog,
-                              icon: const Icon(Icons.download),
-                              label: const Text('Start WiFi Download'),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Export Complete',
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // ─── File List ───
-                    Text('Exported Data', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    ..._files.map((file) => _FileCard(file: file, onShare: () => _shareFile(file))),
-                  ],
+                      const SizedBox(height: 12),
+                      Text(
+                        'Project: ${widget.project.name}',
+                        style: TextStyle(color: context.ink(), fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_files.length} files generated',
+                        style: TextStyle(color: context.ink(0.6), fontSize: 13),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _compatChip('COLMAP'),
+                          _compatChip('3DGS'),
+                          _compatChip('NeRF'),
+                          _compatChip('Nerfstudio'),
+                          _compatChip('Metashape'),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+
+                // ─── Auto-Download (WiFi) ───
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: context.ink(0.04),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.orangeAccent.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.wifi,
+                            color: Colors.orangeAccent,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Import from cameras',
+                            style: TextStyle(
+                              color: Colors.orangeAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Copies this project\'s originals from every camera over its Wi-Fi. Passwords are read over Bluetooth.',
+                        style: TextStyle(
+                          color: context.ink(0.7),
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orangeAccent,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: _showDownloadDialog,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Import originals'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ─── File List ───
+                Text(
+                  'Exported Data',
+                  style: TextStyle(
+                    color: context.ink(0.6),
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._files.map(
+                  (file) =>
+                      _FileCard(file: file, onShare: () => _shareFile(file)),
+                ),
+              ],
+            ),
     );
   }
 
@@ -276,10 +324,13 @@ class _ExportScreenState extends State<ExportScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
+        color: context.ink(0.06),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 10)),
+      child: Text(
+        label,
+        style: TextStyle(color: context.ink(0.6), fontSize: 10),
+      ),
     );
   }
 
@@ -294,7 +345,10 @@ class _ExportScreenState extends State<ExportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Share failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -313,7 +367,10 @@ class _ExportScreenState extends State<ExportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Share failed: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Share failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -335,10 +392,12 @@ class _FileCard extends StatelessWidget {
 
   Color _getColor() {
     if (file.name.contains('transforms')) return const Color(0xFF00FF41);
-    if (file.name.contains('colmap') || file.name.contains('sparse')) return Colors.blueAccent;
+    if (file.name.contains('colmap') || file.name.contains('sparse')) {
+      return Colors.blueAccent;
+    }
     if (file.name.contains('trajectory')) return Colors.orangeAccent;
     if (file.name.contains('rig')) return Colors.purpleAccent;
-    return Colors.white54;
+    return Colors.grey;
   }
 
   @override
@@ -348,7 +407,7 @@ class _FileCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: context.ink(0.04),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
@@ -360,16 +419,28 @@ class _FileCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(file.name,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'monospace')),
+                Text(
+                  file.name,
+                  style: TextStyle(
+                    color: context.ink(),
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(file.sizeFormatted,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                Text(
+                  file.sizeFormatted,
+                  style: TextStyle(color: context.ink(0.4), fontSize: 11),
+                ),
               ],
             ),
           ),
           IconButton(
-            icon: Icon(Icons.share, color: color.withValues(alpha: 0.7), size: 20),
+            icon: Icon(
+              Icons.share,
+              color: color.withValues(alpha: 0.7),
+              size: 20,
+            ),
             onPressed: onShare,
           ),
         ],

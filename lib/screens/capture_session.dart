@@ -478,7 +478,7 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
                             color: Colors.lightBlueAccent,
                             size: 20,
                           ),
-                          tooltip: 'Sync captures via Hotspot',
+                          tooltip: 'Import from cameras',
                           onPressed: _syncHotspotCaptures,
                         ),
                         Container(

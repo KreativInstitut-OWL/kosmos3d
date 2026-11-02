@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/camera_device.dart';
 import '../models/import_report.dart';
 import 'package:crypto/crypto.dart';
@@ -177,6 +178,7 @@ abstract class CameraServiceInterface {
 class GoProService extends ChangeNotifier implements CameraServiceInterface {
   GoProService() {
     capture.addListener(notifyListeners);
+    unawaited(loadKnownCameras());
   }
   @visibleForTesting
   GoProService.testConnection(String id, GoProProtocol protocol) {
@@ -436,7 +438,10 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
             final deviceName = r.device.platformName.isNotEmpty
                 ? r.device.platformName
                 : r.advertisementData.advName;
-            if (deviceName.isNotEmpty) {
+            final isGoPro =
+                deviceName.startsWith('GoPro') ||
+                r.advertisementData.serviceUuids.contains(Guid('fea6'));
+            if (deviceName.isNotEmpty && isGoPro) {
               final existing = _devices.any(
                 (d) => d.id == r.device.remoteId.str,
               );
@@ -469,6 +474,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     }
 
     _isScanning = false;
+    await loadKnownCameras();
     notifyListeners();
   }
 
@@ -608,6 +614,15 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
 
         // Start battery polling timer (every 30s)
         _startBatteryPolling(id);
+
+        await _rememberCamera(id);
+        if (_keepAwake) {
+          try {
+            await _holdAwake(id);
+          } catch (e) {
+            debugPrint('Keep awake skipped on $id: $e');
+          }
+        }
       }
     } catch (e) {
       await disconnectDevice(id);
@@ -623,18 +638,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   Future<void> queryBatteryAndStorage(String id) async {
     if (capture.busy || capture.active) return;
     try {
-      final values = await _query(id, 0x13, [70, 54]);
-      final index = _devices.indexWhere((d) => d.id == id);
-      if (index < 0) return;
-      final battery = values[70] == null ? null : bigEndian(values[70]!);
-      final kb = values[54] == null ? null : bigEndian(values[54]!);
-      _devices[index] = _devices[index].copyWith(
-        batteryLevel: battery,
-        storageRemaining: kb == null
-            ? null
-            : '${(kb / 1048576).toStringAsFixed(1)} GB',
-      );
-      notifyListeners();
+      await refreshStatus(id);
     } catch (e) {
       debugPrint('Status query failed: $e');
     }
@@ -660,6 +664,16 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       const Duration(seconds: 30),
       (_) => queryBatteryAndStorage(id),
     );
+  }
+
+  /// Restores the camera's own auto power-off, then disconnects.
+  Future<void> releaseAndDisconnect(String id) async {
+    try {
+      await _releaseAwake(id);
+    } catch (e) {
+      debugPrint('Auto power-off not restored on $id: $e');
+    }
+    await disconnectDevice(id);
   }
 
   /// Disconnect a device cleanly
@@ -758,7 +772,6 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     _verified[id] = {};
   }
 
-  Future<void> setFlatMode(String id, int modeVal) => _selectMode(id, modeVal);
   Future<void> setPhotoFormat(String id, String format) async {
     final value = GoProSettings.photoOutput[format];
     if (value == null) {
@@ -1012,6 +1025,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     String destination, {
     bool saveToGallery = false,
     void Function(String)? onStatus,
+    bool Function(GoProMediaItem item)? include,
   }) async {
     if (_isSyncingMedia || capture.active || capture.busy) {
       throw StateError('Stop capture and other transfers first');
@@ -1046,9 +1060,9 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
             '${i + 1}/${cameras.length}: joining ${camera.name}. Approve the phone Wi-Fi prompt.',
           );
           await joinCameraWifi(camera.id);
-          final items = await fetchAllMediaItemsFromAllCameras(
+          final items = (await fetchAllMediaItemsFromAllCameras(
             cameraId: camera.id,
-          );
+          )).where(include ?? (_) => true).toList();
           found = items.length;
           final count = await transferMediaItems(
             items,
@@ -1093,23 +1107,6 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       notifyListeners();
     }
     return ImportReport(results, destination);
-  }
-
-  /// 0x17 controls the CAMERA access point; it does not provision a phone AP.
-  Future<void> connectToHotspot(String id, String ssid, String password) async {
-    throw UnsupportedError(
-      'Automatic hotspot provisioning requires the model-specific '
-      'COHN/network protobuf flow. Join the camera Wi-Fi for media transfer. '
-      'No credentials were sent.',
-    );
-  }
-
-  /// Connect all connected GoPros to the phone's Hotspot simultaneously
-  Future<void> connectAllToHotspot(String ssid, String password) async {
-    for (final cam in _devices.where((d) => d.isConnected)) {
-      await connectToHotspot(cam.id, ssid, password);
-      await Future.delayed(const Duration(milliseconds: 400));
-    }
   }
 
   /// Discovers IP addresses of GoPros connected to the phone's hotspot subnet or direct AP.
@@ -1864,170 +1861,294 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   Future<void> triggerAllShutters() => capture.toggle();
   Future<void> stopAllShutters() => capture.stop();
 
-  // ─── SD CARD FORMAT ────────────────────────────────────────
+  // ─── RIG STATUS ────────────────────────────────────────────
 
-  /// Format SD card — MUST stop recording first
-  Future<void> formatSdCard(String id) async {
-    throw UnsupportedError(
-      'Format the SD card on the camera; no verified format command is implemented',
-    );
+  /// Open GoPro status IDs shown in the rig control screen.
+  static const statusIds = [
+    70, // battery %
+    54, // SD remaining KB
+    34, // photos remaining
+    35, // video remaining (s)
+    38, // photos on card
+    39, // videos on card
+    33, // SD state
+    6, // overheating
+    85, // too cold
+    68, // GPS lock
+    8, // busy
+    10, // encoding
+    89, // flat mode
+    69, // AP enabled
+  ];
+
+  final Map<String, Map<int, int>> _cameraStatus = {};
+
+  /// Last status read per camera (see [statusIds]).
+  Map<int, int> statusOf(String id) => _cameraStatus[id] ?? const {};
+
+  /// Reads every status in [statusIds] that the camera reports.
+  Future<Map<int, int>> refreshStatus(String id) async {
+    final values = await _query(id, 0x13, statusIds);
+    final status = {
+      for (final e in values.entries)
+        if (e.value.isNotEmpty) e.key: bigEndian(e.value),
+    };
+    _cameraStatus[id] = status;
+    final index = _devices.indexWhere((d) => d.id == id);
+    if (index >= 0) {
+      final kb = status[54];
+      _devices[index] = _devices[index].copyWith(
+        batteryLevel: status[70],
+        storageRemaining: kb == null
+            ? null
+            : '${(kb / 1048576).toStringAsFixed(1)} GB',
+        isRecording: status[10] == 1,
+      );
+    }
+    notifyListeners();
+    return status;
   }
 
-  /// Format SD cards on ALL connected cameras
-  Future<void> formatAllSdCards() async {
-    for (final cam in _devices.where((d) => d.isConnected)) {
-      await formatSdCard(cam.id);
-      await Future.delayed(const Duration(milliseconds: 1000));
+  Iterable<String> get connectedIds =>
+      _devices.where((d) => d.isConnected).map((d) => d.id);
+
+  /// Runs [action] on every camera in [ids] (all connected when null) and
+  /// collects failures instead of stopping at the first one.
+  Future<List<String>> forCameras(
+    Future<void> Function(String id) action, {
+    Iterable<String>? ids,
+  }) async {
+    if (capture.active || capture.busy) {
+      throw StateError('Stop the capture session first');
     }
+    final targets = (ids ?? connectedIds).toList();
+    if (targets.isEmpty) throw StateError('Connect a camera first');
+    final failures = <String>[];
+    await Future.wait(
+      targets.map((id) async {
+        try {
+          await action(id);
+        } catch (e) {
+          failures.add('${nameOf(id)}: $e');
+        }
+        try {
+          await refreshStatus(id);
+        } catch (_) {}
+      }),
+    );
+    return failures;
+  }
+
+  String nameOf(String id) =>
+      _devices.where((d) => d.id == id).firstOrNull?.displayName ?? id;
+
+  // ─── CAPTURE CONTROL ───────────────────────────────────────
+
+  /// Photo (16), video (12) or time-lapse (13) on one camera.
+  Future<void> selectMode(String id, int mode) => _selectMode(id, mode);
+
+  Future<void> startCapture(String id) async {
+    await _waitIdle(id);
+    await triggerShutter(id);
+  }
+
+  /// HiLight tag in the running video (camera must be recording).
+  Future<void> addHiLightTag(String id) async {
+    if (await _status(id, 10) != 1) {
+      throw StateError('HiLight works while the camera records video');
+    }
+    await _protocol(id).exchange('command', [0x18]);
+  }
+
+  // ─── CAMERA OPTIONS ────────────────────────────────────────
+
+  /// Camera access point on/off (needed for imports and live view).
+  Future<void> setWifiAp(String id, bool enabled) async {
+    await _protocol(id).exchange('command', [0x17, 1, enabled ? 1 : 0]);
+    for (var i = 0; i < 10; i++) {
+      if ((await _status(id, 69) == 1) == enabled) return;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    throw StateError('Camera Wi-Fi did not switch ${enabled ? 'on' : 'off'}');
+  }
+
+  /// GPS (setting 83) on/off, read back.
+  Future<void> setGps(String id, bool enabled) =>
+      _writeSetting(id, 83, enabled ? 1 : 0);
+
+  // ─── KEEP AWAKE ────────────────────────────────────────────
+
+  bool _keepAwake = true;
+  bool get keepAwake => _keepAwake;
+
+  /// Auto power-off value each camera had before KOSMOS set it to Never.
+  final Map<String, int> _autoOffBefore = {};
+
+  Future<void> setKeepAwake(bool enabled) async {
+    _keepAwake = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('keep_cameras_awake', enabled);
+    notifyListeners();
+    final failures = await forCameras(
+      (id) => enabled ? _holdAwake(id) : _releaseAwake(id),
+    );
+    if (failures.isNotEmpty) throw StateError(failures.join('\n'));
+  }
+
+  /// Sets auto power-off (setting 59) to Never and remembers the old value.
+  Future<void> _holdAwake(String id) async {
+    final options = await _capabilities(id, 59);
+    if (!options.contains(0)) return;
+    final current = (await readSettingValues(id, [59]))[59];
+    if (current == null || current == 0) return;
+    final serial = _serials[id] ?? id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('auto_off_$serial', current);
+    _autoOffBefore[id] = current;
+    await _writeSetting(id, 59, 0);
+  }
+
+  /// Restores the auto power-off value from before [_holdAwake].
+  Future<void> _releaseAwake(String id) async {
+    final serial = _serials[id] ?? id;
+    final prefs = await SharedPreferences.getInstance();
+    final before =
+        _autoOffBefore.remove(id) ?? prefs.getInt('auto_off_$serial');
+    if (before == null || _protocols[id] == null) return;
+    await _writeSetting(id, 59, before);
+    await prefs.remove('auto_off_$serial');
+  }
+
+  // ─── STORAGE ───────────────────────────────────────────────
+
+  /// Deletes every file on the SD card over the camera Wi-Fi (Open GoPro
+  /// "Delete All Files", HERO9 and newer), then confirms the card is empty.
+  Future<void> eraseSdCard(String id) async {
+    if (capture.active || capture.busy || _isSyncingMedia) {
+      throw StateError('Stop capture and imports first');
+    }
+    _isSyncingMedia = true;
+    notifyListeners();
+    try {
+      await joinCameraWifi(id);
+      final ip = _devices.firstWhere((d) => d.id == id).wifiIpAddress!;
+      final response = await http
+          .get(
+            Uri.parse(
+              'http://$ip:8080/gp/gpControl/command/storage/delete/all',
+            ),
+          )
+          .timeout(const Duration(seconds: 60));
+      if (response.statusCode != 200) {
+        throw HttpException('Camera answered ${response.statusCode}');
+      }
+      for (var i = 0; i < 30; i++) {
+        final counts = await _query(id, 0x13, [38, 39]);
+        if (bigEndian(counts[38] ?? [0]) == 0 &&
+            bigEndian(counts[39] ?? [0]) == 0) {
+          return;
+        }
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      throw StateError('Camera still reports files after erasing');
+    } finally {
+      try {
+        await SystemSettingsService.releaseCameraWifi();
+      } catch (_) {}
+      _isSyncingMedia = false;
+      notifyListeners();
+    }
+  }
+
+  /// Erases cameras one after another (each needs its own Wi-Fi).
+  Future<List<String>> eraseSdCards(Iterable<String> ids) async {
+    final failures = <String>[];
+    for (final id in ids.toList()) {
+      try {
+        await eraseSdCard(id);
+      } catch (e) {
+        failures.add('${nameOf(id)}: $e');
+      }
+      try {
+        await refreshStatus(id);
+      } catch (_) {}
+    }
+    return failures;
   }
 
   // ─── POWER ─────────────────────────────────────────────────
 
-  /// Power off a connected GoPro
-  Future<void> powerOff(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      // Sleep/Power Off command
-      await chars['commandReq']!.write([0x01, 0x05], withoutResponse: false);
-      debugPrint("GoPro [$id] Power off sent");
-    } catch (e) {
-      debugPrint("Power off error: $e");
-    }
+  /// Sleep keeps Bluetooth listening: the camera wakes when KOSMOS connects.
+  Future<void> sleepCamera(String id) async {
+    await _releaseAwake(id).catchError((_) {});
+    await _protocol(id).exchange('command', [0x05]);
+    await disconnectDevice(id);
   }
 
-  /// Put camera to sleep
-  Future<void> sleep(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      await chars['commandReq']!.write(
-        [0x01, 0x05], // Sleep command
-        withoutResponse: false,
-      );
-    } catch (e) {
-      debugPrint("Sleep error: $e");
-    }
+  /// Power down switches the camera fully off; turn it on by hand.
+  Future<void> powerDown(String id) async {
+    await _releaseAwake(id).catchError((_) {});
+    await _protocol(id).exchange('command', [0x04]);
+    await disconnectDevice(id);
   }
 
-  // ─── WIFI COMMANDS ────────────────────────────────────────
+  // ─── KNOWN CAMERAS ─────────────────────────────────────────
 
-  /// Enable WiFi AP on the camera (for media download)
-  Future<void> enableWifi(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      // AP Mode: ON
-      await chars['commandReq']!.write([
-        0x03,
-        0x17,
-        0x01,
-        0x01,
-      ], withoutResponse: false);
-      debugPrint("GoPro [$id] WiFi AP enabled");
-    } catch (e) {
-      debugPrint("WiFi enable error: $e");
+  static const _knownKey = 'known_cameras';
+
+  /// Adds previously connected cameras to the list so they can be woken
+  /// and connected without a scan.
+  Future<void> loadKnownCameras() async {
+    if (!_isMobilePlatform) return;
+    final prefs = await SharedPreferences.getInstance();
+    _keepAwake = prefs.getBool('keep_cameras_awake') ?? true;
+    final known = prefs.getStringList(_knownKey) ?? [];
+    for (final entry in known) {
+      final split = entry.indexOf('|');
+      if (split <= 0) continue;
+      final id = entry.substring(0, split), name = entry.substring(split + 1);
+      if (_devices.any((d) => d.id == id)) continue;
+      _bleDevices[id] = BluetoothDevice.fromId(id);
+      _devices.add(CameraDevice(id: id, name: name, batteryLevel: 0));
     }
+    notifyListeners();
   }
 
-  /// Disable WiFi AP on the camera
-  Future<void> disableWifi(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      await chars['commandReq']!.write([
-        0x03,
-        0x17,
-        0x01,
-        0x00,
-      ], withoutResponse: false);
-      debugPrint("GoPro [$id] WiFi AP disabled");
-    } catch (e) {
-      debugPrint("WiFi disable error: $e");
-    }
+  Future<void> _rememberCamera(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final known =
+        (prefs.getStringList(_knownKey) ?? [])
+            .where((e) => !e.startsWith('$id|'))
+            .toList()
+          ..add('$id|${nameOf(id)}');
+    await prefs.setStringList(_knownKey, known);
   }
 
-  /// Enable WiFi on ALL connected cameras
-  Future<void> enableAllWifi() async {
-    for (final cam in _devices.where((d) => d.isConnected)) {
-      await enableWifi(cam.id);
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
+  Future<void> forgetCamera(String id) async {
+    if (_protocols[id] != null) await disconnectDevice(id);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _knownKey,
+      (prefs.getStringList(_knownKey) ?? [])
+          .where((e) => !e.startsWith('$id|'))
+          .toList(),
+    );
+    _devices.removeWhere((d) => d.id == id);
+    _bleDevices.remove(id);
+    notifyListeners();
   }
 
-  // ─── GPS / LOCATION ──────────────────────────────────────
-
-  /// Enable GPS on camera (useful for geo-tagging Gaussian Splat data)
-  Future<void> setGps(String id, bool enabled) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['settingReq'] == null) return;
-    try {
-      // Setting ID 83: GPS on/off
-      await chars['settingReq']!.write([
-        0x03,
-        0x53,
-        0x01,
-        enabled ? 0x01 : 0x00,
-      ], withoutResponse: false);
-      debugPrint("GoPro [$id] GPS: ${enabled ? 'ON' : 'OFF'}");
-    } catch (e) {
-      debugPrint("GPS toggle error: $e");
+  /// Connects (and so wakes) every listed camera that is not connected.
+  Future<List<String>> connectAll() async {
+    final failures = <String>[];
+    for (final camera in _devices.where((d) => !d.isConnected).toList()) {
+      try {
+        await connectToDevice(camera.id);
+      } catch (e) {
+        failures.add('${camera.displayName}: $e');
+      }
     }
-  }
-
-  // ─── LOCATE / BEEP ───────────────────────────────────────
-
-  /// Make camera beep to locate it
-  Future<void> locateCamera(String id, bool start) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      await chars['commandReq']!.write([
-        0x03,
-        0x16,
-        0x01,
-        start ? 0x01 : 0x00,
-      ], withoutResponse: false);
-      debugPrint("GoPro [$id] Locate: ${start ? 'ON' : 'OFF'}");
-    } catch (e) {
-      debugPrint("Locate error: $e");
-    }
-  }
-
-  // ─── MEDIA INFO ──────────────────────────────────────────
-
-  /// Get the last captured file name
-  Future<String?> getLastMediaFile(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['queryReq'] == null) return null;
-    try {
-      // Query media count / last file info
-      await chars['queryReq']!.write(
-        [0x02, 0x13, 0x3D], // Query status 61 (media count)
-        withoutResponse: false,
-      );
-      return null; // Response comes async via notification
-    } catch (e) {
-      debugPrint("Media query error: $e");
-      return null;
-    }
-  }
-
-  // ─── HIGHLIGHT / TAG ─────────────────────────────────────
-
-  /// Add a HiLight tag at current moment (useful for marking key captures)
-  Future<void> addHiLightTag(String id) async {
-    final chars = _charCache[id];
-    if (chars == null || chars['commandReq'] == null) return;
-    try {
-      await chars['commandReq']!.write(
-        [0x01, 0x18], // HiLight command
-        withoutResponse: false,
-      );
-      debugPrint("GoPro [$id] HiLight tag added");
-    } catch (e) {
-      debugPrint("HiLight error: $e");
-    }
+    return failures;
   }
 
   // ─── LEGACY COMPAT ────────────────────────────────────────
@@ -2037,23 +2158,11 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       throw StateError('Use the capture screen to control the active rig');
     }
     if (start) {
-      await triggerShutter(id);
+      await startCapture(id);
     } else {
       await stopShutter(id);
     }
-    final index = _devices.indexWhere((d) => d.id == id);
-    if (index != -1) {
-      _devices[index] = _devices[index].copyWith(
-        isRecording: await _status(id, 10) == 1,
-      );
-      notifyListeners();
-    }
-  }
-
-  Future<void> toggleAllRecording(bool start) async {
-    for (int i = 0; i < _devices.length; i++) {
-      await toggleRecording(_devices[i].id, start);
-    }
+    await refreshStatus(id);
   }
 
   void updateCameraSettings(String id, Map<String, String> newSettings) {

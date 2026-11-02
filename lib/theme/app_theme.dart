@@ -168,3 +168,10 @@ class AppTheme {
     );
   }
 }
+
+/// Foreground colour for the current theme; replaces hard-coded white text,
+/// which disappeared in light mode.
+extension AppInk on BuildContext {
+  Color ink([double alpha = 1]) =>
+      Theme.of(this).colorScheme.onSurface.withValues(alpha: alpha);
+}

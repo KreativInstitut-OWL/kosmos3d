@@ -1,5 +1,6 @@
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/gopro_service.dart';
@@ -33,7 +34,6 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
   String _resolution = '4K';
   String _fps = '30';
   String _lens = 'Linear';
-  String _isoMax = 'Camera preset';
   String _shutter = 'Camera preset';
   String _whiteBalance = 'Camera preset';
   String _bitrate = 'High';
@@ -118,8 +118,8 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                       Expanded(
                         child: AppText(
                           goPro.capture.progress,
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: context.ink(0.7),
                             fontSize: 13,
                           ),
                         ),
@@ -159,7 +159,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                             onPressed: details.onStepCancel,
                             child: AppText(
                               settings.translate('back'),
-                              style: const TextStyle(color: Colors.white70),
+                              style: TextStyle(color: context.ink(0.7)),
                             ),
                           ),
                       ],
@@ -171,30 +171,24 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
             steps: [
               // Step 1: Project Name & Mode
               Step(
-                title: AppText(
-                  settings.translate('project_name'),
-                  style: const TextStyle(color: Colors.white),
-                ),
+                title: AppText(settings.translate('project_name')),
                 content: Column(
                   children: [
                     TextFormField(
                       controller: _nameController,
-                      style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: settings.translate('enter_project_name'),
                         border: const OutlineInputBorder(),
                         hintText: 'e.g. Living Room Scan',
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
+                        hintStyle: TextStyle(color: context.ink(0.3)),
                       ),
                     ),
                     const SizedBox(height: 16),
                     // Capture Mode Selection
                     AppText(
                       settings.translate('capture_mode'),
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: context.ink(0.7),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -229,10 +223,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
 
               // Step 2: Camera Settings
               Step(
-                title: AppText(
-                  settings.translate('camera_settings'),
-                  style: const TextStyle(color: Colors.white),
-                ),
+                title: AppText(settings.translate('camera_settings')),
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -297,8 +288,8 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                     // ─── Preset Selector ───
                     AppText(
                       settings.translate('select_preset'),
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: context.ink(0.7),
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
@@ -320,7 +311,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                                 preset.name,
                                 style: const TextStyle(fontSize: 11),
                               ),
-                              backgroundColor: Colors.white.withValues(
+                              backgroundColor: context.ink().withValues(
                                 alpha: 0.06,
                               ),
                               side: BorderSide(
@@ -349,8 +340,6 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                                       preset.settings['Target ISO'] ?? '100';
                                   _fps = preset.settings['FPS'] ?? _fps;
                                   _lens = preset.settings['Lens'] ?? _lens;
-                                  _isoMax =
-                                      preset.settings['ISO Max'] ?? _isoMax;
                                   _shutter =
                                       preset.settings['Shutter'] ?? _shutter;
                                   _whiteBalance =
@@ -409,8 +398,8 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                             _intervalTiming == cameraTimerTiming
                                 ? 'Every camera runs its own timer, started together: exact interval, but single shots are not confirmed.'
                                 : 'The app fires each shot and waits until every camera has saved it: every shot confirmed, about 3 s apart at best.',
-                            style: const TextStyle(
-                              color: Colors.white54,
+                            style: TextStyle(
+                              color: context.ink(0.54),
                               fontSize: 11,
                             ),
                           ),
@@ -446,18 +435,26 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                       ], (v) => setState(() => _lens = v)),
                     ],
                     AppText(
-                      '$_guidance\nMount: $_orientation. Target ISO: $_targetIso (set on every camera). ISO, shutter, white balance and physical mounting are not BLE-verified. Linear is a digital crop and still needs calibration.',
+                      _guidance,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const AppText(
+                      'Set these targets on every camera, or show the ISO / white balance QR from Rig settings. The app cannot read them back.',
                       style: TextStyle(color: Colors.orange, fontSize: 12),
                     ),
                     const SizedBox(height: 12),
-                    _buildSettingDropdown('Target ISO (manual)', _isoMax, [
+                    _buildSettingDropdown('Target ISO (manual)', _targetIso, [
                       'Camera preset',
                       '100',
                       '200',
                       '400',
                       '800',
                       '1600',
-                    ], (v) => setState(() => _isoMax = v)),
+                    ], (v) => setState(() => _targetIso = v)),
                     _buildSettingDropdown('Target shutter (manual)', _shutter, [
                       'Camera preset',
                       'Auto',
@@ -485,10 +482,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
 
               // Step 3: Summary & Start
               Step(
-                title: AppText(
-                  settings.translate('summary'),
-                  style: const TextStyle(color: Colors.white),
-                ),
+                title: AppText(settings.translate('summary')),
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -526,7 +520,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                     _buildSummaryRow(
                       Icons.exposure,
                       'Target ISO (manual)',
-                      _isoMax == 'Camera preset' ? _targetIso : _isoMax,
+                      _targetIso,
                     ),
                     _buildSummaryRow(
                       Icons.stay_current_portrait,
@@ -544,10 +538,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                     const SizedBox(height: 12),
                     AppText(
                       settings.translate('start_capture_hint'),
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: context.ink(0.54), fontSize: 13),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -572,12 +563,12 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
           decoration: BoxDecoration(
             color: isSelected
                 ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
-                : Colors.white.withValues(alpha: 0.05),
+                : context.ink(0.05),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isSelected
                   ? Theme.of(context).primaryColor
-                  : Colors.white24,
+                  : context.ink(0.24),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -587,14 +578,14 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                 icon,
                 color: isSelected
                     ? Theme.of(context).primaryColor
-                    : Colors.white54,
+                    : context.ink(0.54),
                 size: 28,
               ),
               const SizedBox(height: 4),
               AppText(
                 label,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white54,
+                  color: isSelected ? context.ink() : context.ink(0.54),
                   fontSize: 12,
                 ),
               ),
@@ -619,16 +610,16 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
             width: 110,
             child: AppText(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(color: context.ink(0.7), fontSize: 14),
             ),
           ),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: context.ink(0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white24),
+                border: Border.all(color: context.ink(0.24)),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -636,7 +627,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                       ? currentValue
                       : options.first,
                   dropdownColor: const Color(0xFF2A2A2A),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: TextStyle(color: context.ink(), fontSize: 14),
                   isExpanded: true,
                   items: options
                       .map((o) => DropdownMenuItem(value: o, child: AppText(o)))
@@ -662,12 +653,12 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
           const SizedBox(width: 8),
           AppText(
             '$label: ',
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
+            style: TextStyle(color: context.ink(0.54), fontSize: 14),
           ),
           AppText(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.ink(),
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -706,9 +697,7 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
 
     // Shared settings
     cameraSettings['Orientation'] = _orientation;
-    cameraSettings['Target ISO'] = _isoMax == 'Camera preset'
-        ? _targetIso
-        : _isoMax;
+    cameraSettings['Target ISO'] = _targetIso;
     cameraSettings['Guidance'] = _guidance;
     cameraSettings['ISO Max'] = 'Camera preset';
     cameraSettings['Shutter'] = 'Camera preset';

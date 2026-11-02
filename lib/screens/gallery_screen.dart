@@ -2,6 +2,7 @@ import '../l10n/app_text.dart';
 import '../widgets/storage_upload_dialog.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../models/scan_project.dart';
@@ -10,6 +11,7 @@ import '../services/cloud_storage_service.dart';
 import '../services/trajectory_service.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/gopro_media_transfer_dialog.dart';
+import 'settings.dart' show CloudStorageDialog;
 
 /// Gallery screen for viewing captured images and managing project media.
 class GalleryScreen extends StatefulWidget {
@@ -61,14 +63,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const AppText(
+        title: AppText(
           'Delete Selected?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.ink()),
         ),
         content: AppText(
           'Delete ${_selectedIndices.length} file(s)?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: context.ink(0.7)),
         ),
         actions: [
           TextButton(
@@ -137,27 +138,36 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 }
               },
             ),
-            // Upload to storage server
-            if (cloud.isConfigured)
-              IconButton(
-                icon: const Icon(Icons.cloud),
-                tooltip: 'Upload to storage server',
-                onPressed: _imageFiles.isEmpty
-                    ? null
-                    : () => showStorageUploadDialog(
+            // Upload to storage server (opens setup when not configured)
+            IconButton(
+              icon: const Icon(Icons.cloud_upload),
+              tooltip: 'Upload to storage server',
+              onPressed: cloud.isUploading
+                  ? null
+                  : () async {
+                      if (!cloud.isConfigured) {
+                        await showDialog<void>(
+                          context: context,
+                          builder: (_) => const CloudStorageDialog(),
+                        );
+                        if (!context.mounted || !cloud.isConfigured) return;
+                      }
+                      await showStorageUploadDialog(
                         context,
                         projectId: widget.project.id,
                         projectName: widget.project.name,
-                      ),
-              ),
-            // Upload to server
-            IconButton(
-              icon: const Icon(Icons.cloud_upload),
-              tooltip: 'Upload to server',
-              onPressed: _imageFiles.isEmpty
-                  ? null
-                  : () => _showUploadDialog(context, uploadService),
+                      );
+                    },
             ),
+            // KOSMOS receiver on a computer, only when one is set up
+            if (context.watch<SettingsProvider>().serverUrl.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.computer),
+                tooltip: 'Send to KOSMOS receiver',
+                onPressed: uploadService.isUploading
+                    ? null
+                    : () => _showUploadDialog(context, uploadService),
+              ),
             // Export trajectory
             IconButton(
               icon: const Icon(Icons.route),
@@ -175,26 +185,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.photo_library,
-                    size: 64,
-                    color: Colors.white.withValues(alpha: 0.15),
-                  ),
+                  Icon(Icons.photo_library, size: 64, color: context.ink(0.15)),
                   const SizedBox(height: 16),
                   AppText(
                     'No captures yet',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(color: context.ink(0.4), fontSize: 16),
                   ),
                   const SizedBox(height: 8),
                   AppText(
                     'Images downloaded from GoPros will appear here',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.25),
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: context.ink(0.25), fontSize: 13),
                   ),
                 ],
               ),
@@ -207,23 +207,20 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     horizontal: 16,
                     vertical: 10,
                   ),
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: context.ink(0.03),
                   child: Row(
                     children: [
                       Icon(Icons.photo, size: 16, color: primaryColor),
                       const SizedBox(width: 6),
                       AppText(
                         '${_imageFiles.length} files',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: context.ink(0.7), fontSize: 13),
                       ),
                       const Spacer(),
                       AppText(
                         _formatTotalSize(),
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: context.ink(0.54),
                           fontSize: 12,
                         ),
                       ),
@@ -255,10 +252,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       uploadService.isUploading
                           ? uploadService.statusMessage
                           : cloud.statusMessage,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
+                      style: TextStyle(color: context.ink(0.54), fontSize: 11),
                     ),
                   ),
                 ],
@@ -305,7 +299,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             Container(
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(8),
-                                color: Colors.white.withValues(alpha: 0.05),
+                                color: context.ink(0.05),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
@@ -324,14 +318,14 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                               ext == 'mp4'
                                                   ? Icons.videocam
                                                   : Icons.insert_drive_file,
-                                              color: Colors.white38,
+                                              color: context.ink(0.38),
                                               size: 28,
                                             ),
                                             const SizedBox(height: 4),
                                             AppText(
                                               '.$ext',
-                                              style: const TextStyle(
-                                                color: Colors.white38,
+                                              style: TextStyle(
+                                                color: context.ink(0.38),
                                                 fontSize: 10,
                                               ),
                                             ),
@@ -432,14 +426,13 @@ class _GalleryScreenState extends State<GalleryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const AppText(
+        title: AppText(
           'Upload Project',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.ink()),
         ),
         content: AppText(
           'Upload ${_imageFiles.length} files from "${widget.project.name}" to your configured server?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: context.ink(0.7)),
         ),
         actions: [
           TextButton(
@@ -447,11 +440,24 @@ class _GalleryScreenState extends State<GalleryScreen> {
             child: const AppText('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              uploadService.uploadProject(
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showSnackBar(
+                const SnackBar(content: AppText('Sending to KOSMOS receiver…')),
+              );
+              final ok = await uploadService.uploadProject(
                 widget.project.id,
                 widget.project.name,
+              );
+              messenger.showSnackBar(
+                SnackBar(
+                  content: AppText(
+                    ok
+                        ? uploadService.statusMessage
+                        : uploadService.lastError ?? 'Upload failed',
+                  ),
+                ),
               );
             },
             child: const AppText('Upload'),
@@ -468,10 +474,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const AppText(
+        title: AppText(
           'Export Trajectory',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.ink()),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -479,7 +484,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
           children: [
             AppText(
               '${points.length} trajectory points recorded.',
-              style: const TextStyle(color: Colors.white70),
+              style: TextStyle(color: context.ink(0.7)),
             ),
             const SizedBox(height: 12),
             if (points.isEmpty)

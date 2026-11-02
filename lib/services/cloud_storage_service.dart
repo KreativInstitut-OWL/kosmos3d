@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'system_settings_service.dart';
 
 /// Connection details for any S3-compatible object storage
 /// (Backblaze B2, AWS S3, Wasabi, Cloudflare R2, MinIO, Hetzner, ...).
@@ -327,6 +328,11 @@ class CloudStorageService extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    // A joined camera Wi-Fi routes all app traffic to the camera, which has
+    // no internet. Hand traffic back to the normal phone network first.
+    try {
+      await SystemSettingsService.releaseCameraWifi();
+    } catch (_) {}
     final client = _client();
     try {
       final signed = S3Signer(config).sign(
@@ -482,6 +488,11 @@ class CloudStorageService extends ChangeNotifier {
     _lastError = null;
     _statusMessage = 'Connecting to ${config.baseUri.host}…';
     notifyListeners();
+    // A joined camera Wi-Fi routes all app traffic to the camera, which has
+    // no internet. Hand traffic back to the normal phone network first.
+    try {
+      await SystemSettingsService.releaseCameraWifi();
+    } catch (_) {}
     final client = _client();
     final totalBytes = files.fold<int>(
       0,

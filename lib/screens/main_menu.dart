@@ -40,12 +40,21 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     ];
     return Scaffold(
       extendBody: true,
-      body: switch (_tab) {
-        1 => const DeviceManagerScreen(),
-        2 => const TransferHubScreen(),
-        3 => const SettingsScreen(),
-        _ => _projects(),
-      },
+      // Tab screens run under the floating bar; lift their snackbars above it
+      // (they were hidden behind the bar).
+      body: Theme(
+        data: Theme.of(context).copyWith(
+          snackBarTheme: Theme.of(context).snackBarTheme.copyWith(
+            insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 112),
+          ),
+        ),
+        child: switch (_tab) {
+          1 => const DeviceManagerScreen(),
+          2 => const TransferHubScreen(),
+          3 => const SettingsScreen(),
+          _ => _projects(),
+        },
+      ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 0, 16, 10),
         child: ClipRRect(
@@ -386,14 +395,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               final confirmed = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: const Color(0xFF1E1E1E),
-                  title: const AppText(
+                  title: AppText(
                     'Delete Project?',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.ink()),
                   ),
                   content: AppText(
                     'This will permanently delete "${project.name}" and all its capture data.',
-                    style: const TextStyle(color: Colors.white70),
+                    style: TextStyle(color: context.ink(0.7)),
                   ),
                   actions: [
                     TextButton(

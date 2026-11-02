@@ -19,6 +19,13 @@ Review of `main` at `3332414` (28 Oct 2026), tested on a Xiaomi 25078PC3EE (Andr
 | Assets | `assets/logo.png` was an empty file. | Real PNG. Five logo options in `docs/brand/`. |
 | Repo | `.dart_tool/` and `build_log.txt` were tracked. | Untracked and ignored. |
 | Versioning | App said v1.0.0 with build number lower than the installed one. | 2.0.0+3. |
+| Upload (2 Nov) | Transfers → *Send to server* only knew the Windows receiver, prefilled with `127.0.0.1` (the phone itself). The gallery's main upload icon also went to the receiver and showed no progress or error. After joining a camera Wi-Fi, all app traffic stayed routed to the camera (no internet). | Transfers and gallery upload to the storage server; receiver only shown with a real address; camera Wi-Fi route released before every upload and when the import dialog closes. Uploaded from the phone to B2. |
+| Camera controls (2 Nov) | *Power off* and *Sleep* sent the same raw write and swallowed errors; *Locate* sent a command that does not exist (0x16); Wi-Fi/GPS/HiLight failures looked like success; *Format SD* always threw; per-camera *Settings* offered placeholder shutter/WB values the app then rejected. | **Rig control** screen: status, mode, shutter, HiLight, Wi-Fi, GPS, clocks, keep-awake, erase SD, sleep, power off. Every command goes through the protocol with read-back or a visible error. All tested on HERO13 except erase and power off (see below). |
+| Snackbars (2 Nov) | Messages on the tab screens rendered behind the floating navigation bar, so most errors were never seen. | Lifted above the bar. |
+| Scan (2 Nov) | Every named Bluetooth device (headphones, phones) was listed as a camera. | GoPros only (name or Open GoPro service FEA6). |
+| Layout (2 Nov) | Landscape hid half the app behind the navigation bar; Target ISO dropdown showed an unused field; white text vanished in light mode in project flow, gallery, export and settings. | Portrait lock, ISO dropdown bound to the target, theme-aware text colours. |
+
+New on 2 Nov: **Rig control** (see above), **known cameras** (remembered, listed without a scan, tap to wake from sleep, *Connect all*, hold to forget), **keep cameras awake** (auto power-off set to Never while connected, restored on disconnect/sleep; fixes the drop-outs), **erase SD card** over Wi-Fi with the official Open GoPro *Delete all files* (HERO9–13, typed confirmation, checks the card is empty) plus the Labs `!FORMAT` QR for a low-level format, **project-scoped import** (inside a project, only files from its capture runs are imported or preselected), **rig sets** by capture time, **camera-timer interval** for a true 1 s.
 
 New in v2: **All camera settings** (every Open GoPro setting the rig shares, apply-to-all with read-back, highlights cameras that differ), **Camera networks** (all Wi-Fi passwords over BLE, Wi-Fi QR, one-tap join, import all), camera clocks set to phone time on connect, ISO/white-balance/clock Labs QR, CI that builds an Android APK and an unsigned iOS IPA.
 
@@ -31,13 +38,12 @@ The project toggle (now labelled *Capture guidance*) runs a few rules on the pho
 
 ## 3. Remove or merge
 
-- **`SplashScreen`** is never shown. Delete it, or show it during the first permission check.
-- **`export_screen.dart` "WiFi Auto-Download"** duplicates the import dialog and tells users to join Wi-Fi manually. Remove that card; link to Camera networks.
+- ~~`SplashScreen`~~ deleted (2 Nov).
+- ~~`export_screen.dart` "WiFi Auto-Download"~~ was a fake button; now opens the project import (2 Nov).
 - **Two upload settings sections** (Storage server and KOSMOS receiver, each with its own auto-upload switch). Merge into one *Upload destination* list with a single auto-upload choice.
 - **`app_translations.dart` + `ui_dictionary.dart` + `ui_dictionary_v2.dart`**: three translation mechanisms. Move to Flutter `gen_l10n` ARB files before adding a third language.
-- **`capture_session.dart` "Sync captures via Hotspot"** button calls the per-camera Wi-Fi import. Rename to *Import from cameras*.
-- **Legacy compatibility methods** in `gopro_service.dart` (`toggleRecording`, `setFlatMode`, `connectAllToHotspot`, `connectToHotspot`) are unused or always throw.
-- **Hard-coded dark colours** (`Color(0xFF1E1E1E)`, `Colors.white70`) in gallery, export and dialogs break light mode.
+- ~~"Sync captures via Hotspot"~~ renamed *Import from cameras*; ~~legacy hotspot/flat-mode methods~~ removed (2 Nov).
+- **Hard-coded dark colours**: fixed in project flow, gallery, export, settings. Capture screen, coverage viewer and live monitor are intentionally dark.
 - **`instructions.md`** is an agent prompt, not project documentation. Move it out of the repo root.
 
 ## 4. Roadmap
@@ -49,8 +55,9 @@ The project toggle (now labelled *Capture guidance*) runs a few rules on the pho
 3. **Release signing and store metadata.** Android upload keystore, Play App Signing, iOS distribution certificate, privacy manifest (`PrivacyInfo.xcprivacy`), data-safety form, app-store screenshots, final bundle ID (e.g. `institute.kreativ.kosmos3d`).
 4. **Permissions flow.** One onboarding screen that explains and requests Bluetooth, location, local network, photos. Today permissions pop up mid-task.
 5. **Physical acceptance matrix.** HERO9–13 single and mixed, low battery, full card, disconnect at each step, 500-shot sessions, app in background. Record results in the repo.
-6. **Known cameras.** Remember connected cameras (serial, name, position on rig). Reconnect them automatically. Show bonded cameras even when the scan misses them.
-7. **Project-scoped import.** Record the SD card file list when a project starts. "Import" then means "this project's files" by default, not the whole card.
+6. ~~**Known cameras.**~~ Done 2 Nov (remembered, wake by tap, Connect all). Still open: rig position per camera.
+7. ~~**Project-scoped import.**~~ Done 2 Nov via the capture-time windows of the shutter log.
+7a. **Hardware checks still open:** *Erase all files* and *Power off* were not run on the test cameras (erase would have deleted the user's footage; power off needs a hand on the camera to turn back on). Run both once on a spare card.
 
 ### P1: makes it clearly better
 
@@ -60,7 +67,7 @@ The project toggle (now labelled *Capture guidance*) runs a few rules on the pho
 11. **Shutter skew measurement.** Point all cameras at the phone showing a millisecond clock, capture, read the clock in each image (OCR), store the per-camera offset with the project.
 12. **GPMF extraction.** HERO cameras write their own IMU, GPS and exposure time into every file. Parse it on import and merge it with the phone log for exact per-frame timing.
 13. **Labs firmware detection.** Detect Labs firmware over BLE (firmware string) and only offer the QR route when present; otherwise guide through the Protune menu.
-14. **Battery and storage dashboard** for the whole rig with warnings before a project starts (lowest battery, least space, estimated shots left).
+14. **Battery and storage dashboard**: per-camera status is in Rig control (2 Nov); still open: warnings before a project starts with warnings before a project starts (lowest battery, least space, estimated shots left).
 15. **Stable camera order.** Assign each camera a rig position once (front-left, top, ...). Use it in file names, in exports and in the COLMAP rig config.
 16. **Export packages** for RealityCapture, Metashape, COLMAP (`rig_config.json` with fixed relative poses), Nerfstudio and Postshot, created from imported files plus sensor priors.
 17. **Upload to the receiver while capturing** (when the phone has a second network), so nothing waits for the end.
