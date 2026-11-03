@@ -1563,19 +1563,28 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         )
         .toList();
     final List<GoProMediaItem> allItems = [];
+    // On the camera's own Wi-Fi every camera is 10.5.5.9 and the phone sees
+    // only the one it joined; list that one and skip the others.
+    String? notReachable;
+    var listed = 0;
 
     for (final cam in camerasWithIp) {
       final ip = cam.wifiIpAddress!;
       if (!await _associateIp(ip) ||
           !_devices.any((c) => c.id == cam.id && c.wifiIpAddress == ip)) {
-        throw StateError(
-          'Camera identity changed on Wi-Fi. Join ${cam.name} again.',
-        );
+        if (cameraId != null) {
+          throw StateError(
+            'Camera identity changed on Wi-Fi. Join ${cam.name} again.',
+          );
+        }
+        notReachable ??= cam.name;
+        continue;
       }
       final mediaList = await fetchMediaList(ip);
       if (mediaList == null || !mediaList.containsKey('media')) {
         throw StateError('Could not read the SD card on ${cam.name}');
       }
+      listed++;
 
       final mediaDirs = mediaList['media'] as List<dynamic>?;
       if (mediaDirs == null) continue;
@@ -1613,6 +1622,10 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
           );
         }
       }
+    }
+
+    if (listed == 0 && notReachable != null) {
+      throw StateError('Join the Wi-Fi of $notReachable first.');
     }
 
     // Sort newest first

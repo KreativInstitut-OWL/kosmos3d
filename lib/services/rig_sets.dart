@@ -208,7 +208,7 @@ RigSetResult pairPhotosByTime(
 }
 
 /// Wall-clock windows of a project's capture runs (with margins for camera
-/// clock offset and processing), used to import only this project's files.
+/// clock offset, interval set-up and processing), used to import only this project's files.
 Future<List<({DateTime start, DateTime end})>> projectRunWindows(
   String capturesDirectory,
 ) async {
@@ -234,21 +234,28 @@ Future<List<({DateTime start, DateTime end})>> projectRunWindows(
     final times = result.sets.where((s) => s.run == r).map((s) => s.event);
     if (times.isEmpty) continue;
     windows.add((
-      start: times.first.subtract(const Duration(seconds: 10)),
+      // HERO13 stamps every photo of an interval run with the time the
+      // interval was set up (before the first shot), not the shot time.
+      start: times.first.subtract(const Duration(minutes: 5)),
       end: times.last.add(const Duration(minutes: 2)),
     ));
   }
   return windows;
 }
 
-/// Camera file time (`mod`, camera wall clock) inside any of [windows].
+/// Camera file time (`mod`) inside any of [windows].
+///
+/// Without a time zone `mod` is the camera wall clock written as UTC; after
+/// the app sets the clock with a time zone, HERO13 reports true UTC. Accept
+/// either reading.
 bool inRunWindows(
   DateTime? cameraTime,
   List<({DateTime start, DateTime end})> windows,
 ) {
   if (cameraTime == null) return false;
-  final wall = cameraTime.toUtc();
-  return windows.any((w) => !wall.isBefore(w.start) && !wall.isAfter(w.end));
+  bool inside(DateTime t) =>
+      windows.any((w) => !t.isBefore(w.start) && !t.isAfter(w.end));
+  return inside(cameraTime.toUtc()) || inside(wallClock(cameraTime));
 }
 
 /// Reads a project's shutter log and imported photos, writes rig_sets.json

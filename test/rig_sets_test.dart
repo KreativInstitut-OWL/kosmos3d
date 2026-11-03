@@ -138,4 +138,26 @@ void main() {
     expect(result.outsideRuns, 1);
     expect(result.toJson()['complete_set_count'], 5);
   });
+
+  test(
+    'project filter accepts camera file times as wall clock or true UTC',
+    () {
+      final shot = DateTime.now().copyWith(second: 30, millisecond: 0);
+      final window = wallClock(shot);
+      final windows = [
+        (
+          start: window.subtract(const Duration(seconds: 10)),
+          end: window.add(const Duration(minutes: 2)),
+        ),
+      ];
+      // Camera without a time zone: wall clock written as if it were UTC.
+      expect(inRunWindows(window, windows), isTrue);
+      // Camera with a time zone: the real instant.
+      expect(inRunWindows(shot, windows), isTrue);
+      expect(
+        inRunWindows(shot.add(const Duration(hours: 3)), windows),
+        isFalse,
+      );
+    },
+  );
 }
