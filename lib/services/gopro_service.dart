@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
@@ -370,6 +371,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
 
   // Keep-alive and polling timers per device
   final Map<String, Timer> _keepAliveTimers = {};
+  final Map<String, int> _missedKeepAlives = {};
   final Map<String, Timer> _batteryPollTimers = {};
 
   @override
@@ -652,8 +654,18 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       if (capture.busy && capture.phase != CapturePhase.synchronizing) return;
       try {
         await _protocol(id).exchange('setting', [91, 1, 66]);
+        _missedKeepAlives[id] = 0;
       } catch (e) {
         debugPrint('Keep alive failed: $e');
+        // A hung or switched-off camera never reports a disconnect; without
+        // this it stayed "Connected" while every command timed out.
+        final missed = (_missedKeepAlives[id] ?? 0) + 1;
+        _missedKeepAlives[id] = missed;
+        // Not during imports: the camera ignores BLE while Wi-Fi is busy.
+        if (missed >= 5 && !capture.active && !_isSyncingMedia) {
+          _missedKeepAlives.remove(id);
+          await disconnectDevice(id);
+        }
       }
     });
   }
@@ -999,10 +1011,19 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       await Future<void>.delayed(const Duration(seconds: 1));
     }
     if (!apReady) throw StateError('Camera Wi-Fi did not become ready');
-    await SystemSettingsService.joinCameraWifi(
-      credentials.ssid,
-      credentials.password,
-    );
+    // Android sometimes times out the first request without showing its
+    // prompt (seen on HERO13 + Android 16); a second request succeeds.
+    for (var attempt = 0; ; attempt++) {
+      try {
+        await SystemSettingsService.joinCameraWifi(
+          credentials.ssid,
+          credentials.password,
+        );
+        break;
+      } on PlatformException catch (e) {
+        if (attempt >= 1 || e.code != 'WIFI_UNAVAILABLE') rethrow;
+      }
+    }
     for (var attempt = 0; attempt < 15; attempt++) {
       // Every direct AP has the same IP. Match its serial before trusting it.
       for (var i = 0; i < _devices.length; i++) {
@@ -1370,9 +1391,19 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     final partial = File('$targetFilePath.part');
     IOSink? sink;
     var keepPartial = true;
+    var resumeFrom = 0, received = 0, statusCode = 0;
+    final started = Stopwatch()..start();
+    // During long transfers HERO13 stops answering BLE keep-alives; keep the
+    // camera's Wi-Fi session alive over HTTP so it does not drop the download.
+    final keepAlive = Timer.periodic(const Duration(seconds: 3), (_) {
+      http
+          .get(Uri.parse('http://$ip:8080/gopro/camera/keep_alive'))
+          .timeout(const Duration(seconds: 3))
+          .then((_) {}, onError: (_) {});
+    });
     try {
       // Resume an interrupted download (multi-GB video chapters) with Range.
-      final resumeFrom = await partial.exists() ? await partial.length() : 0;
+      resumeFrom = await partial.exists() ? await partial.length() : 0;
       final request = http.Request(
         'GET',
         Uri.parse('http://$ip:8080/videos/DCIM/$directory/$filename'),
@@ -1381,6 +1412,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       final response = await client
           .send(request)
           .timeout(const Duration(seconds: 15));
+      statusCode = response.statusCode;
       final resumed = resumeFrom > 0 && response.statusCode == 206;
       if (response.statusCode != 200 && !resumed) {
         throw HttpException('HTTP ${response.statusCode}');
@@ -1398,7 +1430,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       sink = partial.openWrite(
         mode: resumed ? FileMode.append : FileMode.write,
       );
-      var received = resumed ? resumeFrom : 0;
+      received = resumed ? resumeFrom : 0;
       final length = response.contentLength == null
           ? (expectedBytes ?? 0)
           : response.contentLength! + (resumed ? resumeFrom : 0);
@@ -1428,9 +1460,14 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       _downloadDigests[targetFilePath] = digestSink.value.toString();
       return true;
     } catch (e) {
-      debugPrint('Download failed ($filename): $e');
+      debugPrint(
+        'Download failed ($filename): $e '
+        '[HTTP $statusCode, resume from $resumeFrom, at $received bytes, '
+        '${started.elapsed.inSeconds} s]',
+      );
       return false;
     } finally {
+      keepAlive.cancel();
       await sink?.close();
       client.close();
       if (!keepPartial && await partial.exists()) await partial.delete();
@@ -1635,16 +1672,25 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         );
         continue;
       }
-      final ok = await downloadMediaFile(
-        item.ip,
-        item.directory,
-        item.filename,
-        savePath,
-        expectedBytes: item.sizeBytes,
-        onProgress: (prog) {
-          onProgress?.call(i + 1, total, prog, status);
-        },
-      );
+      // Large chapters sometimes lose the connection mid-file; each retry
+      // resumes from the partial file instead of starting over.
+      var ok = false;
+      for (var attempt = 0; attempt < 4 && !ok && !_cancelImport; attempt++) {
+        if (attempt > 0) {
+          onProgress?.call(i + 1, total, 0, 'Resuming ${item.filename}');
+          await Future<void>.delayed(Duration(seconds: 2 * attempt));
+        }
+        ok = await downloadMediaFile(
+          item.ip,
+          item.directory,
+          item.filename,
+          savePath,
+          expectedBytes: item.sizeBytes,
+          onProgress: (prog) {
+            onProgress?.call(i + 1, total, prog, status);
+          },
+        );
+      }
 
       if (ok) {
         final digest =

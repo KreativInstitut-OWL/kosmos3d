@@ -87,6 +87,73 @@ The project toggle (now labelled *Capture guidance*) runs a few rules on the pho
 24. **Team mode.** Two phones on one rig (control + monitor), shared project via the receiver.
 25. **More languages** once ARB files are in place (French, Spanish, Dutch are the next largest scanning markets in Europe).
 
+## 4b. Toward the best scanning tool (review of 2 Nov)
+
+Ordered by value for real scans. Effort: S (hours), M (days), L (weeks).
+
+### Capture quality
+
+| # | Idea | Why | Effort |
+| --- | --- | --- | --- |
+| C1 | **Pre-flight check** before *Start*: battery, card space ("enough for 38 min at 1 s"), heat, settings equal on all cameras, clocks synced, keep-awake on, GPS lock. One green/red list. | Most failed scans are a flat battery or a full card found out afterwards. | S |
+| C2 | **Missed-shot watchdog for camera-timer mode**: poll the photo counter (status 38) every few seconds; alarm when a camera falls behind or stops. | Camera timers are fast but unconfirmed; this restores trust. | S |
+| C3 | **Speed coach**: max walking speed from interval, lens FOV and subject distance (LiDAR/ARCore depth) for ≥70 % overlap; haptic warning when too fast. | Overlap is what makes or breaks reconstruction. | M |
+| C4 | **Exposure match after the first shot**: fetch one screennail per camera, compare ISO/shutter/WB from EXIF and brightness; warn on mismatch. | Mismatched exposure is the second most common failure. | M |
+| C5 | **Blur check** on screennails (Laplacian variance) with a "retake this position" hint. | Catches motion blur on site, not at the desk. | M |
+| C6 | **Rig calibration**: ChArUco board captured by all cameras gives intrinsics and fixed relative poses, stored in the rig profile and exported as COLMAP `rig_config.json`. | Fixed-rig constraints make alignment faster and more robust. | L |
+| C7 | **6-DoF phone poses** (ARCore/ARKit VIO, LiDAR depth on iPhone Pro) per shot, Lixel-style coverage mesh coloured by view count. | Real coverage instead of compass heading, metric scale for free. | L |
+| C8 | **Scan templates**: object (turntable/orbits), room, façade, corridor, pole/aerial; each sets interval, timing, lens, overlap target and guidance. | New users get good captures without knowing the theory. | S |
+| C9 | **Video-for-splats pipeline**: on import, extract the sharpest frame per time window at a chosen fps. | Video capture is easier; splat tools want sharp stills. | M |
+| C10 | **Phone camera as an extra rig camera** (wide + ultra-wide) triggered with the GoPros. | Free extra viewpoints. | M |
+
+### Connectivity and transfer
+
+| # | Idea | Why | Effort |
+| --- | --- | --- | --- |
+| T1 | **COHN**: all cameras on the phone hotspot or a router at once: parallel downloads, live previews from every camera, no Wi-Fi switching, no Android prompt per camera. | Biggest time saver for rigs; also fixes the per-camera join timeouts. | L |
+| T2 | **Background service** for imports and uploads (Android foreground service, iOS background URLSession), progress notification, resumes after the app is closed. | A 50 GB import should not need the screen on. | M |
+| T3 | **Byte-based progress with speed and time left** for imports (now counts files, so a 4 GB chapter looks frozen for minutes). | Users cancelled imports that were working. | S |
+| T4 | **Multipart S3 upload** (parallel parts, >5 GB files, resume per part) and **upload while capturing** when a second network is available. | Videos above 5 GB cannot be uploaded today. | M |
+| T5 | **Verified clean-up**: after an import (and optionally the server upload) is verified by checksum, offer *Erase cameras* and *Free phone storage* in one step. | Closes the loop: shoot → import → upload → erase. | S |
+| T6 | **5 GHz camera Wi-Fi** (setting 178) when the phone supports it. | Roughly double transfer speed. | S |
+| T7 | **USB-C import** (MTP over OTG) as the fallback for huge videos. | Fastest path when Wi-Fi is the bottleneck. | M |
+| T8 | **Auto-reconnect during capture** with pause/resume of the interval. | One dropped camera currently ends the run. | M |
+
+### Data and processing
+
+| # | Idea | Why | Effort |
+| --- | --- | --- | --- |
+| D1 | **Export packages**: COLMAP (with rig sets and priors), Nerfstudio `transforms.json`, Metashape XML, RealityScan, Postshot. | Hand-off without manual sorting. | M |
+| D2 | **Processing hand-off**: send a project to a self-hosted COLMAP/GLOMAP + gsplat or Postshot server, show status, download the splat and preview it in the app. | From capture to result in one tool. | L |
+| D3 | **GPMF extraction**: camera IMU, GPS and exact exposure time per frame merged with the phone log. | Exact timing replaces estimated camera-timer events. | M |
+| D4 | **Project notes and site photos**, tags, map of all projects, search. | Real projects need context. | S |
+| D5 | **Per-project storage budget** and a warning when the phone runs low. | Imports fail late when the phone is full. | S |
+
+### App quality
+
+| # | Idea | Why | Effort |
+| --- | --- | --- | --- |
+| Q1 | **Onboarding**: permissions wizard and a first-scan tutorial. | Permission pop-ups mid-task confuse users. | S |
+| Q2 | **Field mode**: large controls, volume-button shutter, screen-off capture, watch remote. | Gloves, sun, one free hand. | M |
+| Q3 | **Rig designer**: name and place each camera (front, left, up), colour per camera everywhere. | Files and sets become understandable. | S |
+| Q4 | **One upload settings page** (storage server and receiver merged, single auto-upload). | Two sections with two switches confuse. | S |
+| Q5 | **ARB translations** instead of three dictionary mechanisms; more languages. | Maintainability. | M |
+| Q6 | **Dark-only screens** (capture, coverage viewer, live monitor) follow the theme or stay dark on purpose with matching dialogs. | Consistency. | S |
+| Q7 | **Large-font and tablet layouts** (buttons that wrap, two-pane on tablets) instead of the portrait lock. | Accessibility. | M |
+| Q8 | **Crash and log export** (opt-in), one-tap "send diagnostics". | Field bugs are otherwise invisible. | S |
+| Q9 | **GoPro simulator** (fake BLE + HTTP) for integration tests in CI. | Most bugs found today only showed on hardware. | M |
+| Q10 | **More cameras**: Insta360 X4/X5, DJI Osmo Action, generic BLE shutter. | The coordinator already supports any `RigCamera`. | L |
+| Q11 | **iPhone test pass** incl. LiDAR, background and Wi-Fi join. | Untested platform. | M |
+| Q12 | **Store release**: signing, privacy manifest, bundle ID, screenshots. | Distribution. | M |
+
+### Known imperfections still open (found 2 Nov)
+
+- First camera Wi-Fi join can time out without Android's prompt (one automatic retry added; COHN removes the problem).
+- HERO13 sometimes drops the HTTP connection in the middle of a 4 GB chapter and stops answering Bluetooth for a minute; downloads now resume up to four times, and a silent camera is marked disconnected after 15 s.
+- Import progress is per file, not per byte (T3).
+- Old projects without `run_started_utc` split runs by a 10 s gap.
+- `isRecording` is refreshed only every 30 s outside Rig control.
+
 ## 5. Defaults review
 
 | Setting | Before | Now | Reason |

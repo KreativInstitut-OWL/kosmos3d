@@ -162,152 +162,42 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ─── Connection Guide Banner ───
-            Container(
-              margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).primaryColor.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 18,
-                    color: Theme.of(context).primaryColor,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: AppText(
-                      'No system Bluetooth pairing needed! Just make sure your GoPros have Wireless Connections enabled, then tap Scan → tap a camera to connect.',
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).primaryColor.withValues(alpha: 0.8),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // ─── Hotspot Tethering & Wi-Fi Sync Banner (When connected cameras exist) ───
-            if (cameras.any((c) => c.isConnected))
+            if (!cameras.any((c) => c.isConnected))
               Container(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Theme.of(
+                      context,
+                    ).primaryColor.withValues(alpha: 0.2),
+                  ),
                 ),
-                child: Column(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      onTap: () => showDialog(
-                        context: context,
-                        builder: (_) => const HotspotDialog(),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.wifi_tethering,
-                            size: 20,
-                            color: Colors.lightBlueAccent,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const AppText(
-                                  'Camera networks',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                AppText(
-                                  'Wi-Fi passwords, one-tap join and import from every camera',
-                                  style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.7),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, size: 18),
-                        ],
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Theme.of(context).primaryColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: AppText(
+                        'No system Bluetooth pairing needed! Just make sure your GoPros have Wireless Connections enabled, then tap Scan → tap a camera to connect.',
+                        style: TextStyle(
+                          color: Theme.of(
+                            context,
+                          ).primaryColor.withValues(alpha: 0.8),
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 4,
-                      children: [
-                        TextButton.icon(
-                          onPressed: () =>
-                              GoProMediaTransferDialog.show(context),
-                          icon: const Icon(
-                            Icons.download_for_offline,
-                            size: 16,
-                          ),
-                          label: const AppText('Transfer'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Theme.of(context).primaryColor,
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => const HotspotDialog(),
-                          ),
-                          icon: const Icon(Icons.key, size: 16),
-                          label: const AppText('Wi-Fi passwords'),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.lightBlueAccent,
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () =>
-                              SystemSettingsService.openHotspotSettings(),
-                          icon: const Icon(Icons.settings, size: 16),
-                          label: const AppText('Hotspot settings'),
-                        ),
-                      ],
-                    ),
-                    if (goPro.isSyncingMedia ||
-                        goPro.syncStatusMessage.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      AppText(
-                        goPro.syncStatusMessage,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.lightBlueAccent,
-                        ),
-                      ),
-                      if (goPro.isSyncingMedia) ...[
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: goPro.syncProgress > 0
-                              ? goPro.syncProgress
-                              : null,
-                        ),
-                      ],
-                    ],
                   ],
                 ),
               ),
-
             // ─── Camera List ───
             Expanded(
               child: cameras.isEmpty
@@ -373,8 +263,131 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                       physics: const BouncingScrollPhysics(
                         parent: AlwaysScrollableScrollPhysics(),
                       ),
-                      padding: const EdgeInsets.all(16),
+                      // Room for the floating navigation bar.
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
                       children: [
+                        // ─── Hotspot Tethering & Wi-Fi Sync Banner (When connected cameras exist) ───
+                        if (cameras.any((c) => c.isConnected))
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.blue.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                InkWell(
+                                  onTap: () => showDialog(
+                                    context: context,
+                                    builder: (_) => const HotspotDialog(),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.wifi_tethering,
+                                        size: 20,
+                                        color: Colors.lightBlueAccent,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const AppText(
+                                              'Camera networks',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            AppText(
+                                              'Wi-Fi passwords, one-tap join and import from every camera',
+                                              style: TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurface
+                                                    .withValues(alpha: 0.7),
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(Icons.chevron_right, size: 18),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () =>
+                                          GoProMediaTransferDialog.show(
+                                            context,
+                                          ),
+                                      icon: const Icon(
+                                        Icons.download_for_offline,
+                                        size: 16,
+                                      ),
+                                      label: const AppText('Transfer'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Theme.of(
+                                          context,
+                                        ).primaryColor,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => showDialog(
+                                        context: context,
+                                        builder: (_) => const HotspotDialog(),
+                                      ),
+                                      icon: const Icon(Icons.key, size: 16),
+                                      label: const AppText('Wi-Fi passwords'),
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Colors.lightBlueAccent,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () =>
+                                          SystemSettingsService.openHotspotSettings(),
+                                      icon: const Icon(
+                                        Icons.settings,
+                                        size: 16,
+                                      ),
+                                      label: const AppText('Hotspot settings'),
+                                    ),
+                                  ],
+                                ),
+                                if (goPro.isSyncingMedia ||
+                                    goPro.syncStatusMessage.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  AppText(
+                                    goPro.syncStatusMessage,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.lightBlueAccent,
+                                    ),
+                                  ),
+                                  if (goPro.isSyncingMedia) ...[
+                                    const SizedBox(height: 4),
+                                    LinearProgressIndicator(
+                                      value: goPro.syncProgress > 0
+                                          ? goPro.syncProgress
+                                          : null,
+                                    ),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
+
                         if (cameras.where((c) => !c.isConnected).length > 1)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
