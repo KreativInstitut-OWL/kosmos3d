@@ -1404,6 +1404,17 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     try {
       // Resume an interrupted download (multi-GB video chapters) with Range.
       resumeFrom = await partial.exists() ? await partial.length() : 0;
+      // Checksum while downloading, so a 10 GB video is never read twice.
+      var digestSink = _DigestSink();
+      var hasher = sha256.startChunkedConversion(digestSink);
+      if (resumeFrom > 0) {
+        // Hash the part on disk before asking the camera: reading GBs takes
+        // minutes and the camera closes a response nobody reads from.
+        onStatus?.call('Checking the part already downloaded');
+        await for (final chunk in partial.openRead()) {
+          hasher.add(chunk);
+        }
+      }
       final request = http.Request(
         'GET',
         Uri.parse('http://$ip:8080/videos/DCIM/$directory/$filename'),
@@ -1418,14 +1429,10 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         throw HttpException('HTTP ${response.statusCode}');
       }
       await partial.parent.create(recursive: true);
-      // Checksum while downloading, so a 10 GB video is never read twice.
-      final digestSink = _DigestSink();
-      final hasher = sha256.startChunkedConversion(digestSink);
-      if (resumed) {
-        onStatus?.call('Checking the part already downloaded');
-        await for (final chunk in partial.openRead()) {
-          hasher.add(chunk);
-        }
+      if (resumeFrom > 0 && !resumed) {
+        // Camera ignored Range and sent the whole file: start over.
+        digestSink = _DigestSink();
+        hasher = sha256.startChunkedConversion(digestSink);
       }
       sink = partial.openWrite(
         mode: resumed ? FileMode.append : FileMode.write,
