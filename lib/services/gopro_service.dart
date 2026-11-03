@@ -2148,7 +2148,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     var missing = 0;
     for (final dir in (list['media'] as List? ?? [])) {
       final d = '${dir['d']}'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
-      for (final f in (dir['fs'] as List? ?? [])) {
+      for (final f in expandMediaEntries(dir['fs'] as List? ?? [])) {
         if (!imported.contains('${serial}_${d}_${f['n']}')) missing++;
       }
     }

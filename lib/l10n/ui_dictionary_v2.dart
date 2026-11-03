@@ -43,6 +43,7 @@ const germanV2 = <String, String>{
   'Cards are empty': 'Karten sind leer',
   'Card is empty': 'Karte ist leer',
   'Not imported': 'Nicht importiert',
+  'Erase anyway': 'Trotzdem löschen',
   '{camera}: {n} files not imported, not erased':
       '{camera}: {n} Dateien nicht importiert, nicht gelöscht',
   'These cards hold files that are in no project: {list}. Erase them anyway?':

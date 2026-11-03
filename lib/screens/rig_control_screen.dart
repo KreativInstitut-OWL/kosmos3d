@@ -99,7 +99,12 @@ class _RigControlScreenState extends State<RigControlScreen> {
     }
   }
 
-  Future<bool> _confirm(String title, String text, {String? typed}) async {
+  Future<bool> _confirm(
+    String title,
+    String text, {
+    String? typed,
+    String? action,
+  }) async {
     final controller = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
@@ -136,7 +141,7 @@ class _RigControlScreenState extends State<RigControlScreen> {
               onPressed: typed == null || controller.text.trim() == typed
                   ? () => Navigator.pop(ctx, true)
                   : null,
-              child: AppText(title),
+              child: AppText(action ?? title),
             ),
           ],
         ),
@@ -465,9 +470,10 @@ class _RigControlScreenState extends State<RigControlScreen> {
                         (s, ids) async => [
                           ...await s.eraseSdCards(ids, skipped: skipped),
                           ...skipped.map(
-                            (e) => '{camera}: {n} files not imported, not erased'
-                                .replaceAll('{camera}', e.camera)
-                                .replaceAll('{n}', '${e.count}'),
+                            (e) =>
+                                '{camera}: {n} files not imported, not erased'
+                                    .replaceAll('{camera}', e.camera)
+                                    .replaceAll('{n}', '${e.count}'),
                           ),
                         ],
                         done: targets.length == 1
@@ -483,6 +489,7 @@ class _RigControlScreenState extends State<RigControlScreen> {
                         'These cards hold files that are in no project: {list}. Erase them anyway?'
                             .replaceAll('{list}', list),
                         typed: 'ERASE',
+                        action: 'Erase anyway',
                       )) {
                         return;
                       }
