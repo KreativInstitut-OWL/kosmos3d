@@ -357,6 +357,8 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   final Map<String, BluetoothDevice> _bleDevices = {};
   final Map<String, Map<String, BluetoothCharacteristic>> _charCache = {};
   bool _isScanning = false;
+  // Cameras that advertised during the latest scan (off cameras do not).
+  final Set<String> _seenInScan = {};
 
   // Media sync state
   bool _isSyncingMedia = false;
@@ -409,12 +411,24 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   // ─── SCANNING ──────────────────────────────────────────────
 
   @override
-  void startScan() async {
-    if (_isScanning || capture.busy || capture.active) return;
+  void startScan() => scan();
+
+  /// Scans for 10 s; completes when the scan (or one already running) ends.
+  Future<void> scan() async {
+    if (capture.busy || capture.active) return;
+    if (_isScanning) {
+      while (_isScanning) {
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+      return;
+    }
 
     _isScanning = true;
-    // Preserve connected peripherals and their notification subscriptions.
-    _devices.removeWhere((d) => !d.isConnected);
+    _seenInScan.clear();
+    // Keep connected and remembered cameras so the list does not jump while
+    // scanning; drop only strangers that may have gone away.
+    final known = await _knownIds();
+    _devices.removeWhere((d) => !d.isConnected && !known.contains(d.id));
     notifyListeners();
 
     if (_isMobilePlatform) {
@@ -444,6 +458,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
                 deviceName.startsWith('GoPro') ||
                 r.advertisementData.serviceUuids.contains(Guid('fea6'));
             if (deviceName.isNotEmpty && isGoPro) {
+              _seenInScan.add(r.device.remoteId.str);
               final existing = _devices.any(
                 (d) => d.id == r.device.remoteId.str,
               );
@@ -496,7 +511,12 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     try {
       final device = _bleDevices[id];
       if (device != null) {
-        await device.connect(license: License.free);
+        // An unreachable camera holds the Bluetooth stack until the timeout;
+        // keep it short so connected cameras keep their keep-alives.
+        await device.connect(
+          license: License.free,
+          timeout: const Duration(seconds: 12),
+        );
 
         // Request larger MTU on Android for Wi-Fi provisioning credentials
         try {
@@ -629,6 +649,12 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     } catch (e) {
       await disconnectDevice(id);
       debugPrint("Connection Error: $e");
+      if (e is FlutterBluePlusException) {
+        throw StateError(
+          '${nameOf(id)} did not answer. Switch it on or bring it closer, '
+          'then try again.',
+        );
+      }
       rethrow;
     }
   }
@@ -2167,6 +2193,13 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     notifyListeners();
   }
 
+  Future<Set<String>> _knownIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_knownKey) ?? [])
+        .map((e) => e.split('|').first)
+        .toSet();
+  }
+
   Future<void> _rememberCamera(String id) async {
     final prefs = await SharedPreferences.getInstance();
     final known =
@@ -2192,9 +2225,21 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   }
 
   /// Connects (and so wakes) every listed camera that is not connected.
+  ///
+  /// Scans first and skips cameras that are not advertising: a connect to a
+  /// camera that is switched off stalls Bluetooth for the connected ones.
   Future<List<String>> connectAll() async {
     final failures = <String>[];
-    for (final camera in _devices.where((d) => !d.isConnected).toList()) {
+    final waiting = _devices.where((d) => !d.isConnected).toList();
+    if (waiting.isEmpty) return failures;
+    if (_isMobilePlatform) await scan();
+    for (final camera in waiting) {
+      if (_isMobilePlatform && !_seenInScan.contains(camera.id)) {
+        failures.add(
+          '${camera.displayName}: not found. Switch it on or bring it closer.',
+        );
+        continue;
+      }
       try {
         await connectToDevice(camera.id);
       } catch (e) {

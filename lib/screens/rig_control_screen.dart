@@ -450,9 +450,8 @@ class _RigControlScreenState extends State<RigControlScreen> {
                   'SD card',
                   [
                     action(Icons.delete_forever, 'Erase all files', () async {
-                      final names = _targets(
-                        service,
-                      ).map(service.nameOf).join(', ');
+                      final targets = _targets(service);
+                      final names = targets.map(service.nameOf).join(', ');
                       if (!await _confirm(
                         'Erase',
                         'Delete every photo and video on: $names? Import what you need first. This cannot be undone.',
@@ -463,7 +462,9 @@ class _RigControlScreenState extends State<RigControlScreen> {
                       await _run(
                         'Erasing (joins each camera Wi-Fi)',
                         (s, ids) => s.eraseSdCards(ids),
-                        done: 'Cards are empty',
+                        done: targets.length == 1
+                            ? 'Card is empty'
+                            : 'Cards are empty',
                       );
                     }, color: Colors.redAccent),
                     action(Icons.qr_code, 'Format (Labs QR)', _labsFormatQr),

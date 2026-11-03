@@ -41,6 +41,7 @@ const germanV2 = <String, String>{
   'Erasing (joins each camera Wi-Fi)':
       'Löschen (verbindet sich mit jedem Kamera-WLAN)',
   'Cards are empty': 'Karten sind leer',
+  'Card is empty': 'Karte ist leer',
   'Sleeping. Connect all in Cameras wakes them.':
       'Schlafen. „Alle verbinden“ unter Kameras weckt sie.',
   'Powered-off cameras must be switched on by hand. Use Sleep to wake them from the app later.':
