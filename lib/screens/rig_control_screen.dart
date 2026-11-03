@@ -459,10 +459,41 @@ class _RigControlScreenState extends State<RigControlScreen> {
                       )) {
                         return;
                       }
+                      final skipped = <NotImportedException>[];
                       await _run(
                         'Erasing (joins each camera Wi-Fi)',
-                        (s, ids) => s.eraseSdCards(ids),
+                        (s, ids) async => [
+                          ...await s.eraseSdCards(ids, skipped: skipped),
+                          ...skipped.map(
+                            (e) => '{camera}: {n} files not imported, not erased'
+                                .replaceAll('{camera}', e.camera)
+                                .replaceAll('{n}', '${e.count}'),
+                          ),
+                        ],
                         done: targets.length == 1
+                            ? 'Card is empty'
+                            : 'Cards are empty',
+                      );
+                      if (skipped.isEmpty || !mounted) return;
+                      final list = skipped
+                          .map((e) => '${e.camera}: ${e.count}')
+                          .join(', ');
+                      if (!await _confirm(
+                        'Not imported',
+                        'These cards hold files that are in no project: {list}. Erase them anyway?'
+                            .replaceAll('{list}', list),
+                        typed: 'ERASE',
+                      )) {
+                        return;
+                      }
+                      final force = skipped.map((e) => e.id).toSet();
+                      await _run(
+                        'Erasing (joins each camera Wi-Fi)',
+                        (s, ids) => s.eraseSdCards(
+                          ids.where(force.contains),
+                          evenIfNotImported: true,
+                        ),
+                        done: force.length == 1
                             ? 'Card is empty'
                             : 'Cards are empty',
                       );
@@ -547,8 +578,6 @@ class _StatusTile extends StatelessWidget {
       if (status[70] != null) '${status[70]}%',
       if (status[54] != null)
         '${(status[54]! / 1048576).toStringAsFixed(1)} GB free',
-      if (status[34] != null)
-        '{n} photos left'.replaceAll('{n}', '${status[34]}'),
       if (status[35] != null) '${_duration(status[35]!)} video',
       if (status[38] != null || status[39] != null)
         '{p} photos, {v} videos on card'

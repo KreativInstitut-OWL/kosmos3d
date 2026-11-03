@@ -42,6 +42,11 @@ const germanV2 = <String, String>{
       'Löschen (verbindet sich mit jedem Kamera-WLAN)',
   'Cards are empty': 'Karten sind leer',
   'Card is empty': 'Karte ist leer',
+  'Not imported': 'Nicht importiert',
+  '{camera}: {n} files not imported, not erased':
+      '{camera}: {n} Dateien nicht importiert, nicht gelöscht',
+  'These cards hold files that are in no project: {list}. Erase them anyway?':
+      'Auf diesen Karten liegen Dateien, die in keinem Projekt sind: {list}. Trotzdem löschen?',
   'Sleeping. Connect all in Cameras wakes them.':
       'Schlafen. „Alle verbinden“ unter Kameras weckt sie.',
   'Powered-off cameras must be switched on by hand. Use Sleep to wake them from the app later.':

@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/camera_device.dart';
 import '../models/import_report.dart';
 import 'package:crypto/crypto.dart';
@@ -2115,7 +2116,46 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
 
   /// Deletes every file on the SD card over the camera Wi-Fi (Open GoPro
   /// "Delete All Files", HERO9 and newer), then confirms the card is empty.
-  Future<void> eraseSdCard(String id) async {
+  /// Local names of every file imported into any project.
+  Future<Set<String>> _importedNames() async {
+    final names = <String>{};
+    final root = Directory(
+      '${(await getApplicationDocumentsDirectory()).path}/kosmos3d_projects',
+    );
+    if (!await root.exists()) return names;
+    await for (final f in root.list(recursive: true, followLinks: false)) {
+      final path = f.path;
+      if (!path.endsWith('.receipt.json')) continue;
+      names.add(
+        path
+            .substring(0, path.length - '.receipt.json'.length)
+            .split(RegExp(r'[\/]'))
+            .last,
+      );
+    }
+    return names;
+  }
+
+  /// Files on the camera with no import receipt in any project.
+  Future<int> _notImported(String id, String ip) async {
+    final list = await fetchMediaList(ip);
+    if (list == null) throw StateError('Could not read the file list');
+    final serial = (_serials[id] ?? id).replaceAll(
+      RegExp(r'[^A-Za-z0-9_-]'),
+      '_',
+    );
+    final imported = await _importedNames();
+    var missing = 0;
+    for (final dir in (list['media'] as List? ?? [])) {
+      final d = '${dir['d']}'.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+      for (final f in (dir['fs'] as List? ?? [])) {
+        if (!imported.contains('${serial}_${d}_${f['n']}')) missing++;
+      }
+    }
+    return missing;
+  }
+
+  Future<void> eraseSdCard(String id, {bool evenIfNotImported = false}) async {
     if (capture.active || capture.busy || _isSyncingMedia) {
       throw StateError('Stop capture and imports first');
     }
@@ -2124,6 +2164,10 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     try {
       await joinCameraWifi(id);
       final ip = _devices.firstWhere((d) => d.id == id).wifiIpAddress!;
+      if (!evenIfNotImported) {
+        final missing = await _notImported(id, ip);
+        if (missing > 0) throw NotImportedException(id, nameOf(id), missing);
+      }
       final response = await http
           .get(
             Uri.parse(
@@ -2153,11 +2197,19 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   }
 
   /// Erases cameras one after another (each needs its own Wi-Fi).
-  Future<List<String>> eraseSdCards(Iterable<String> ids) async {
+  /// Cameras whose card still holds files that were never imported are
+  /// left alone and reported as [NotImportedException]s in [skipped].
+  Future<List<String>> eraseSdCards(
+    Iterable<String> ids, {
+    bool evenIfNotImported = false,
+    List<NotImportedException>? skipped,
+  }) async {
     final failures = <String>[];
     for (final id in ids.toList()) {
       try {
-        await eraseSdCard(id);
+        await eraseSdCard(id, evenIfNotImported: evenIfNotImported);
+      } on NotImportedException catch (e) {
+        skipped?.add(e);
       } catch (e) {
         failures.add('${nameOf(id)}: $e');
       }
@@ -2329,6 +2381,17 @@ class _GoProRigCamera implements RigCamera {
   Future<void> start() => service.triggerShutter(id);
   @override
   Future<void> stop() => service.stopShutter(id);
+  @override
+  Future<int?> photoCount() => service._status(id, 38);
+}
+
+/// Erase refused: the card holds files that are not in any project.
+class NotImportedException implements Exception {
+  NotImportedException(this.id, this.camera, this.count);
+  final String id, camera;
+  final int count;
+  @override
+  String toString() => '$camera: $count files not imported';
 }
 
 /// Receives the single digest from a chunked SHA-256 conversion.

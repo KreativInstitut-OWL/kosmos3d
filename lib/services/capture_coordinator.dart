@@ -21,6 +21,9 @@ abstract class RigCamera {
   Future<void> verifyReady();
   Future<void> start();
   Future<void> stop();
+
+  /// Photos on the card, or null when the camera cannot tell.
+  Future<int?> photoCount();
 }
 
 /// Interval timing value that hands the interval to the cameras' own timers.
@@ -46,6 +49,11 @@ class CaptureCoordinator extends ChangeNotifier {
   Timer? _timer;
   Future<void>? _stopFuture;
   int _generation = 0;
+
+  /// Camera-timer run: first estimated shot, shots logged, card counts at start.
+  DateTime? _timerStarted;
+  int _timerShots = 0;
+  final Map<String, int> _countAtStart = {};
   Future<void> Function(DateTime)? onPhoto;
   List<Map<String, Object>> lastDispatch = [];
 
@@ -199,6 +207,11 @@ class CaptureCoordinator extends ChangeNotifier {
   Future<void> _startCameraTimers(int generation) async {
     await Future.wait(_rig.map((c) => c.verifyReady()));
     if (generation != _generation) return;
+    _countAtStart.clear();
+    for (final c in _rig) {
+      final n = await _count(c);
+      if (n != null) _countAtStart[c.id] = n;
+    }
     final started = DateTime.now().toUtc();
     final clock = Stopwatch()..start();
     lastDispatch = [];
@@ -224,11 +237,12 @@ class CaptureCoordinator extends ChangeNotifier {
       CapturePhase.capturing,
       'Capturing on camera timers (${_seconds(_interval!.inMicroseconds / 1e6)}) - tap Stop',
     );
-    var shot = 0;
+    _timerStarted = started;
+    _timerShots = 0;
     Future<void> estimate() async {
       if (!_active || generation != _generation) return;
+      final shot = _timerShots++;
       await onPhoto?.call(started.add(_interval! * shot));
-      shot++;
     }
 
     await estimate();
@@ -299,6 +313,7 @@ class CaptureCoordinator extends ChangeNotifier {
         _active = true;
         throw StateError('Stop unconfirmed: ${failures.join(', ')}');
       }
+      await _logShotsBeforeStop();
       _state(
         error == null ? CapturePhase.ready : CapturePhase.fault,
         error == null ? 'Stopped' : 'Stopped - synchronize again',
@@ -310,6 +325,33 @@ class CaptureCoordinator extends ChangeNotifier {
     } finally {
       _locked = false;
       notifyListeners();
+    }
+  }
+
+  static Future<int?> _count(RigCamera c) async {
+    try {
+      return await c.photoCount();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The camera timers keep shooting until the Stop command arrives, often one
+  /// shot after the phone's last estimate. Log the shots the cards counted.
+  Future<void> _logShotsBeforeStop() async {
+    final started = _timerStarted;
+    _timerStarted = null;
+    if (!_cameraTimer || started == null || _countAtStart.isEmpty) return;
+    var taken = 0;
+    for (final c in _rig) {
+      final before = _countAtStart[c.id];
+      final after = await _count(c);
+      if (before != null && after != null && after - before > taken) {
+        taken = after - before;
+      }
+    }
+    while (_timerShots < taken) {
+      await onPhoto?.call(started.add(_interval! * _timerShots++));
     }
   }
 

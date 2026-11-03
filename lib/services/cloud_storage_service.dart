@@ -48,22 +48,6 @@ class StorageServerConfig {
   }
 }
 
-/// Values injected at build time with `--dart-define-from-file=config/dev.local.json`.
-/// Empty in public builds; used only to prefill the form on a developer device.
-class StorageBuildDefaults {
-  static const endpoint = String.fromEnvironment('KOSMOS_S3_ENDPOINT');
-  static const region = String.fromEnvironment('KOSMOS_S3_REGION');
-  static const bucket = String.fromEnvironment('KOSMOS_S3_BUCKET');
-  static const accessKeyId = String.fromEnvironment('KOSMOS_S3_ACCESS_KEY_ID');
-  static const secretKey = String.fromEnvironment('KOSMOS_S3_SECRET_KEY');
-  static const prefix = String.fromEnvironment(
-    'KOSMOS_S3_PREFIX',
-    defaultValue: 'kosmos3d',
-  );
-  static bool get available =>
-      endpoint.isNotEmpty && bucket.isNotEmpty && accessKeyId.isNotEmpty;
-}
-
 /// AWS Signature Version 4 for S3-compatible APIs.
 class S3Signer {
   S3Signer(this.config);
@@ -221,16 +205,6 @@ class CloudStorageService extends ChangeNotifier {
           await _secureStorage.write(key: entry.value, value: old);
         }
         if (old != null) await _secureStorage.delete(key: entry.key);
-      }
-      if (!(await loadConfig()).isComplete && StorageBuildDefaults.available) {
-        await saveCredentials(
-          keyId: StorageBuildDefaults.accessKeyId,
-          applicationKey: StorageBuildDefaults.secretKey,
-          bucketName: StorageBuildDefaults.bucket,
-          endpoint: StorageBuildDefaults.endpoint,
-          region: StorageBuildDefaults.region,
-          prefix: StorageBuildDefaults.prefix,
-        );
       }
       _isConfigured = (await loadConfig()).isComplete;
     } catch (e) {

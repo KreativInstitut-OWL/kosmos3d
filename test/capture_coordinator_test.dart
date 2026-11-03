@@ -39,6 +39,10 @@ class FakeCamera implements RigCamera {
     events.add('$id:stop');
     if (failStop) throw StateError('stop rejected');
   }
+
+  int? photos;
+  @override
+  Future<int?> photoCount() async => photos;
 }
 
 void main() {
@@ -235,6 +239,26 @@ void main() {
       expect(photos.length, count);
     },
   );
+  test('camera timer logs the shot the cameras took before Stop', () async {
+    final a = FakeCamera('a', [])..photos = 10;
+    final b = FakeCamera('b', [])..photos = 4;
+    final rig = CaptureCoordinator();
+    addTearDown(rig.dispose);
+    final photos = <DateTime>[];
+    rig.onPhoto = (t) async => photos.add(t);
+    await rig.prepare(
+      [a, b],
+      'photo',
+      {'Interval': '0.5s', 'Interval Timing': cameraTimerTiming},
+    );
+    await rig.toggle();
+    await Future<void>.delayed(const Duration(milliseconds: 1150));
+    a.photos = 14;
+    b.photos = 8;
+    await rig.stop();
+    expect(photos.length, 4);
+    expect(photos[3].difference(photos[0]), const Duration(milliseconds: 1500));
+  });
   test('camera timer refuses intervals the cameras cannot run', () async {
     final rig = CaptureCoordinator();
     addTearDown(rig.dispose);

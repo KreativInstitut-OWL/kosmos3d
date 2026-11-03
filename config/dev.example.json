@@ -1,8 +1,0 @@
-{
-  "KOSMOS_S3_ENDPOINT": "https://s3.eu-central-003.backblazeb2.com",
-  "KOSMOS_S3_REGION": "eu-central-003",
-  "KOSMOS_S3_BUCKET": "your-bucket",
-  "KOSMOS_S3_ACCESS_KEY_ID": "your-access-key-id",
-  "KOSMOS_S3_SECRET_KEY": "your-secret-key",
-  "KOSMOS_S3_PREFIX": "kosmos3d"
-}
