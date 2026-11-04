@@ -75,7 +75,7 @@ Updates install over the old version and keep your projects. Every change on `ma
 App Store and TestFlight builds are planned. Until then you have two routes:
 
 - **With a Mac:** open `ios/Runner.xcworkspace` in Xcode, choose your team under *Signing & Capabilities*, connect the iPhone and press Run. Details in [ios/BUILD.md](ios/BUILD.md).
-- **Without a Mac:** every build produces `kosmos3d-ios-unsigned-ipa` in [Actions](../../actions/workflows/build.yml). Install it with [Sideloadly](https://sideloadly.io/) or AltStore using your Apple ID. See [ios/BUILD.md](ios/BUILD.md).
+- **Without a Mac:** download `kosmos3d-unsigned.ipa` from [the latest release](../../releases/latest). Install it with [Sideloadly](https://sideloadly.io/) or AltStore using your Apple ID. See [ios/BUILD.md](ios/BUILD.md).
 
 Allow **Bluetooth**, **Local Network** and **Location** when asked.
 
