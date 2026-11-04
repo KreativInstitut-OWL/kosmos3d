@@ -389,7 +389,7 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
 
     try {
       if (confirmed == true && mounted) {
-        await _goPro.capture.stop();
+        if (_goPro.capture.active) await _goPro.capture.stop();
         await _lidar.stopCapture();
         if (_lidar.depthFrameCount > 0) await _lidar.exportPointCloud();
         await _trajectory.stopRecording();
