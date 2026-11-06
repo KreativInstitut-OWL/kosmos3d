@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,13 +41,25 @@ class SettingsProvider extends ChangeNotifier {
   int _sensorRate = 50; // ms
   int _gpsRate = 1; // seconds (GPS fixes arrive at ~1 Hz)
   String _captureInterval = '1s';
-  bool _coverageVisualizer = true;
+  // Android phones have no LiDAR; their view is only an estimate from GPS
+  // and orientation, so it starts switched off there.
+  static final bool _coverageDefault = !Platform.isAndroid;
+  bool _coverageVisualizer = _coverageDefault;
   bool get coverageVisualizer => _coverageVisualizer;
   Future<void> setCoverageVisualizer(bool value) async {
     _coverageVisualizer = value;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('coverage_visualizer', value);
+  }
+
+  bool _keepScreenOn = false;
+  bool get keepScreenOn => _keepScreenOn;
+  Future<void> setKeepScreenOn(bool value) async {
+    _keepScreenOn = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('keep_screen_on', value);
   }
 
   String _hotspotSsid = '';
@@ -204,7 +217,9 @@ class SettingsProvider extends ChangeNotifier {
     _hotspotSsid = prefs.getString('hotspot_ssid') ?? '';
     _hotspotPassword = prefs.getString('hotspot_password') ?? '';
 
-    _coverageVisualizer = prefs.getBool('coverage_visualizer') ?? true;
+    _coverageVisualizer =
+        prefs.getBool('coverage_visualizer') ?? _coverageDefault;
+    _keepScreenOn = prefs.getBool('keep_screen_on') ?? false;
     // Server configuration
     _serverUrl = prefs.getString('server_url') ?? '';
     _serverUsername = prefs.getString('server_username') ?? '';

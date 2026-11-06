@@ -827,4 +827,9 @@ const germanV2 = <String, String>{
   'SLOW DOWN (< 1.0 m/s)': 'LANGSAMER (< 1,0 m/s)',
   'Heading: {h}°  Pitch: {p}°': 'Richtung: {h}°  Neigung: {p}°',
   '{n} Poses • {c}% Cov': '{n} Posen • {c} % Abdeckung',
+  'Keep screen on': 'Bildschirm anlassen',
+  'During capture the screen never locks. Capture keeps running with the screen locked either way, until you tap Stop.':
+      'Während der Aufnahme sperrt sich der Bildschirm nicht. Die Aufnahme läuft auch bei gesperrtem Bildschirm weiter, bis du Stopp tippst.',
+  'Project settings': 'Projekteinstellungen',
+  'Save and continue': 'Speichern und weiter',
 };

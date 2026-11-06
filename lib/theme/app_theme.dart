@@ -33,6 +33,9 @@ class AppTheme {
     );
     return base.copyWith(
       scaffoldBackgroundColor: dark ? backgroundDark : backgroundLight,
+      // Drop-down and popup menus open on the theme surface, so their text
+      // (onSurface) stays readable in light and dark mode.
+      canvasColor: surface,
       primaryColor: primary,
       visualDensity: VisualDensity.standard,
       textTheme: base.textTheme.copyWith(
@@ -153,6 +156,10 @@ class AppTheme {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
         ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: surface,
+        textStyle: TextStyle(color: foreground, fontSize: 15),
       ),
       dialogTheme: DialogThemeData(backgroundColor: surface, shape: shape),
       snackBarTheme: SnackBarThemeData(

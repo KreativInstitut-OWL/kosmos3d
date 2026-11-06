@@ -4,7 +4,7 @@ class AppTranslations {
     'en': {
       'coverage_viewer': 'Point cloud / coverage viewer',
       'coverage_viewer_desc':
-          'Measured LiDAR where available; otherwise GPS and orientation.',
+          'iPhone with LiDAR: measured depth. Other phones: an estimate from GPS and orientation, not a 3D scan.',
       'coverage_disabled': 'Coverage viewer disabled in Settings',
       'app_title': 'KOSMOS 3D',
       'device_manager': 'Device Manager',
@@ -120,7 +120,7 @@ class AppTranslations {
     'de': {
       'coverage_viewer': 'Punktwolken- und Abdeckungsansicht',
       'coverage_viewer_desc':
-          'Gemessene LiDAR-Daten, falls verfügbar; sonst GPS und Ausrichtung.',
+          'iPhone mit LiDAR: gemessene Tiefe. Andere Handys: Schätzung aus GPS und Ausrichtung, kein 3D-Scan.',
       'coverage_disabled': 'Abdeckungsansicht in den Einstellungen deaktiviert',
       'app_title': 'KOSMOS 3D',
       'device_manager': 'Geräte-Manager',

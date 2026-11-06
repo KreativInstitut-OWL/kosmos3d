@@ -377,6 +377,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   builder: (_) => CaptureSessionScreen(project: project),
                 ),
               );
+            } else if (value == 'settings') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ProjectFlowScreen(project: project),
+                ),
+              );
             } else if (value == 'gallery') {
               Navigator.push(
                 context,
@@ -425,6 +432,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           },
           itemBuilder: (_) => [
             const PopupMenuItem(value: 'open', child: AppText('Open Session')),
+            const PopupMenuItem(
+              value: 'settings',
+              child: AppText('Project settings'),
+            ),
             const PopupMenuItem(value: 'gallery', child: AppText('Gallery')),
             const PopupMenuItem(value: '3d', child: AppText('3D Preview')),
             const PopupMenuItem(

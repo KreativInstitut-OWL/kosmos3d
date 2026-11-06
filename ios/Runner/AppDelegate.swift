@@ -64,6 +64,13 @@ final class KosmosNative: NSObject, ARSessionDelegate {
           } else { self.joinedSSID = ssid; result(true) }
         }
       }
+    case "keepScreenOn":
+      let on = (call.arguments as? [String: Any])?["on"] as? Bool ?? false
+      UIApplication.shared.isIdleTimerDisabled = on
+      result(true)
+    case "startCaptureService", "stopCaptureService":
+      // iOS keeps Bluetooth running in the background (bluetooth-central mode).
+      result(true)
     case "releaseCameraWifi":
       if let ssid = joinedSSID { NEHotspotConfigurationManager.shared.removeConfiguration(forSSID: ssid) }
       joinedSSID = nil; result(true)

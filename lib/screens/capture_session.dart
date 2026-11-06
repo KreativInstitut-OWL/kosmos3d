@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/system_settings_service.dart';
 import '../models/scan_project.dart';
 import '../models/capture_point.dart';
 import '../providers/settings_provider.dart';
@@ -20,6 +22,7 @@ import '../widgets/gopro_media_transfer_dialog.dart';
 
 import '../widgets/camera_live_monitor.dart';
 import 'point_cloud_preview.dart';
+import 'project_flow.dart';
 import '../services/lidar_service.dart';
 import '../widgets/measured_cloud_view.dart';
 import '../widgets/point_cloud_coverage_visualizer.dart';
@@ -40,7 +43,7 @@ class CaptureSessionScreen extends StatefulWidget {
 }
 
 class _CaptureSessionScreenState extends State<CaptureSessionScreen>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin {
   late ScanProject _project;
   late GoProService _goPro;
   late OrientationService _orientation;
@@ -72,7 +75,6 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _project = widget.project;
     _goPro = context.read<GoProService>();
     _orientation = context.read<OrientationService>();
@@ -111,6 +113,13 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
       if (!mounted) return;
       _orientation.start();
       final settings = context.read<SettingsProvider>();
+      if (settings.keepScreenOn) {
+        unawaited(SystemSettingsService.keepScreenOn(true));
+      }
+      // Shows the "capture running" notification; the session keeps going
+      // with the screen locked until the user taps Stop.
+      if (Platform.isAndroid) await Permission.notification.request();
+      unawaited(SystemSettingsService.startCaptureService(_project.name));
       _trajectory.configure(
         sensorRateMs: settings.sensorRate,
         gpsRateSec: settings.gpsRate,
@@ -163,6 +172,17 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
     }
   }
 
+  /// Opens the project settings (exposure, interval, lens ...). Saving
+  /// applies them to the cameras and returns to a fresh session.
+  Future<void> _editSettings() async {
+    await _goPro.stopAllPreviews();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ProjectFlowScreen(project: _project)),
+    );
+  }
+
   Future<void> _reconnectAndStop() async {
     if (_isPreparing) return;
     setState(() => _isPreparing = true);
@@ -211,21 +231,9 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if ((state == AppLifecycleState.paused ||
-            state == AppLifecycleState.detached) &&
-        _goPro.capture.active) {
-      unawaited(
-        _goPro.capture.stop().catchError((Object e) {
-          _showError(e);
-        }),
-      );
-    }
-  }
-
-  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    unawaited(SystemSettingsService.stopCaptureService());
+    unawaited(SystemSettingsService.keepScreenOn(false));
     _uiTimer?.cancel();
     _sessionTimer.stop();
     _pulseController.dispose();
@@ -471,6 +479,17 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
                           onPressed: () => setState(
                             () => _showLiveMonitor = !_showLiveMonitor,
                           ),
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.tune,
+                            color: Colors.white70,
+                            size: 20,
+                          ),
+                          tooltip: 'Project settings',
+                          onPressed: _goPro.capture.active || _isCapturing
+                              ? null
+                              : _editSettings,
                         ),
                         IconButton(
                           icon: const Icon(
@@ -825,7 +844,12 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
     final settings = context.watch<SettingsProvider>();
     final lidar = context.watch<LidarService>();
     if (!settings.coverageVisualizer) {
-      return Center(child: AppText(settings.translate('coverage_disabled')));
+      return Center(
+        child: AppText(
+          settings.translate('coverage_disabled'),
+          style: const TextStyle(color: Colors.white54),
+        ),
+      );
     }
     if (lidar.isAvailable) return const MeasuredCloudView();
     // No LiDAR: interactive pose/coverage view from GPS + phone orientation.

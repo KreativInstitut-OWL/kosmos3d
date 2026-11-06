@@ -5,13 +5,17 @@ import 'package:provider/provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/gopro_service.dart';
 import '../services/capture_coordinator.dart';
+import '../models/scan_project.dart';
 import '../services/project_service.dart';
 
 import 'capture_session.dart';
 import '../widgets/gaussian_labs_qr.dart';
 
 class ProjectFlowScreen extends StatefulWidget {
-  const ProjectFlowScreen({super.key});
+  const ProjectFlowScreen({super.key, this.project});
+
+  /// Set to change an existing project's settings instead of creating one.
+  final ScanProject? project;
 
   @override
   State<ProjectFlowScreen> createState() => _ProjectFlowScreenState();
@@ -41,6 +45,25 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
   @override
   void initState() {
     super.initState();
+    final project = widget.project;
+    if (project != null) {
+      _nameController.text = project.name;
+      _captureMode = project.captureMode;
+      final c = project.cameraSettings;
+      _photoFormat = c['Photo Format'] ?? _photoFormat;
+      _interval = c['Interval'] ?? _interval;
+      _intervalTiming = c['Interval Timing'] ?? _intervalTiming;
+      _guidance = c['Guidance'] ?? _guidance;
+      _orientation = c['Orientation'] ?? _orientation;
+      _targetIso = c['Target ISO'] ?? _targetIso;
+      _resolution = c['Resolution'] ?? _resolution;
+      _fps = c['FPS'] ?? _fps;
+      _lens = c['Lens'] ?? _lens;
+      _shutter = c['Target Shutter'] ?? _shutter;
+      _whiteBalance = c['Target White Balance'] ?? _whiteBalance;
+      _bitrate = c['Bitrate'] ?? _bitrate;
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider = context.read<SettingsProvider>();
       await provider.ready;
@@ -76,7 +99,13 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
     return PopScope(
       canPop: !_isStarting,
       child: Scaffold(
-        appBar: AppBar(title: AppText(settings.translate('new_project'))),
+        appBar: AppBar(
+          title: AppText(
+            widget.project == null
+                ? settings.translate('new_project')
+                : 'Project settings',
+          ),
+        ),
         body: AbsorbPointer(
           absorbing: _isStarting,
           child: Stepper(
@@ -149,7 +178,9 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                           onPressed: details.onStepContinue,
                           child: AppText(
                             isLastStep
-                                ? settings.translate('start_capture')
+                                ? (widget.project == null
+                                      ? settings.translate('start_capture')
+                                      : 'Save and continue')
                                 : settings.translate('next'),
                           ),
                         ),
@@ -626,7 +657,6 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
                   value: options.contains(currentValue)
                       ? currentValue
                       : options.first,
-                  dropdownColor: const Color(0xFF2A2A2A),
                   style: TextStyle(color: context.ink(), fontSize: 14),
                   isExpanded: true,
                   items: options
@@ -718,12 +748,23 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
     try {
       await goPro.prepareCapture(_captureMode, cameraSettings);
       if (!mounted) return;
-      final project = await projectService.createProject(
-        _nameController.text.trim(),
-        captureMode: _captureMode,
-        smartCapture: _smartCapture,
-        cameraSettings: cameraSettings,
-      );
+      final existing = widget.project;
+      final ScanProject project;
+      if (existing != null) {
+        existing
+          ..name = _nameController.text.trim()
+          ..captureMode = _captureMode
+          ..cameraSettings = cameraSettings;
+        await projectService.updateProject(existing);
+        project = existing;
+      } else {
+        project = await projectService.createProject(
+          _nameController.text.trim(),
+          captureMode: _captureMode,
+          smartCapture: _smartCapture,
+          cameraSettings: cameraSettings,
+        );
+      }
       if (!context.mounted) return;
       Navigator.pushReplacement(
         context,

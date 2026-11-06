@@ -256,6 +256,21 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   SwitchListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    secondary: const Icon(Icons.light_mode_outlined, size: 22),
+                    title: const AppText(
+                      'Keep screen on',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    subtitle: const AppText(
+                      'During capture the screen never locks. Capture keeps running with the screen locked either way, until you tap Stop.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    value: settings.keepScreenOn,
+                    activeThumbColor: Theme.of(context).primaryColor,
+                    onChanged: (v) => settings.setKeepScreenOn(v),
+                  ),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     secondary: const Icon(Icons.speed, size: 22),
                     title: const AppText(
                       'Barometer (Altitude)',
@@ -669,7 +684,6 @@ class SettingsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
         title: Row(
           children: [
             AppText(preset.icon, style: const TextStyle(fontSize: 24)),
@@ -745,7 +759,6 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
           title: AppText(
             'Create Preset',
             style: TextStyle(color: context.ink()),
@@ -763,45 +776,45 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _dropdownRow('Resolution', resolution, [
+                _dropdownRow(ctx, 'Resolution', resolution, [
                   '1080p',
                   '2.7K',
                   '4K',
                   '5.3K',
                 ], (v) => setState(() => resolution = v)),
-                _dropdownRow('FPS', fps, [
+                _dropdownRow(ctx, 'FPS', fps, [
                   '24',
                   '30',
                   '60',
                   '120',
                 ], (v) => setState(() => fps = v)),
-                _dropdownRow('Lens', lens, [
+                _dropdownRow(ctx, 'Lens', lens, [
                   'Linear',
                   'Wide',
                   'SuperView',
                 ], (v) => setState(() => lens = v)),
-                _dropdownRow('Target ISO (manual)', isoMax, [
+                _dropdownRow(ctx, 'Target ISO (manual)', isoMax, [
                   '100',
                   '200',
                   '400',
                   '800',
                   '1600',
                 ], (v) => setState(() => isoMax = v)),
-                _dropdownRow('Target shutter (manual)', shutter, [
+                _dropdownRow(ctx, 'Target shutter (manual)', shutter, [
                   'Auto',
                   '1/60',
                   '1/120',
                   '1/240',
                   '1/480',
                 ], (v) => setState(() => shutter = v)),
-                _dropdownRow('Target white balance (manual)', wb, [
+                _dropdownRow(ctx, 'Target white balance (manual)', wb, [
                   'Auto',
                   '3200K',
                   '4000K',
                   '5500K',
                   '6500K',
                 ], (v) => setState(() => wb = v)),
-                _dropdownRow('Bitrate', bitrate, [
+                _dropdownRow(ctx, 'Bitrate', bitrate, [
                   'Standard',
                   'High',
                 ], (v) => setState(() => bitrate = v)),
@@ -846,6 +859,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget _dropdownRow(
+    BuildContext context,
     String label,
     String value,
     List<String> options,
@@ -859,16 +873,15 @@ class SettingsScreen extends StatelessWidget {
             width: 90,
             child: AppText(
               label,
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              style: TextStyle(color: context.ink(0.54), fontSize: 12),
             ),
           ),
           Expanded(
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: value,
-                dropdownColor: const Color(0xFF2E2E2E),
                 isExpanded: true,
-                style: TextStyle(color: Colors.white, fontSize: 13),
+                style: TextStyle(color: context.ink(), fontSize: 13),
                 items: options
                     .map((o) => DropdownMenuItem(value: o, child: AppText(o)))
                     .toList(),

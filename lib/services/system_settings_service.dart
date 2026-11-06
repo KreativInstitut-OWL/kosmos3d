@@ -13,6 +13,32 @@ class SystemSettingsService {
   static Future<void> releaseCameraWifi() =>
       _channel.invokeMethod('releaseCameraWifi');
 
+  /// Keeps the app running while a capture session is open, also with the
+  /// screen locked (Android foreground service with a notification).
+  static Future<void> startCaptureService(String title) async {
+    try {
+      await _channel.invokeMethod('startCaptureService', {'title': title});
+    } catch (e) {
+      debugPrint('Capture service not started: $e');
+    }
+  }
+
+  static Future<void> stopCaptureService() async {
+    try {
+      await _channel.invokeMethod('stopCaptureService');
+    } catch (e) {
+      debugPrint('Capture service not stopped: $e');
+    }
+  }
+
+  static Future<void> keepScreenOn(bool on) async {
+    try {
+      await _channel.invokeMethod('keepScreenOn', {'on': on});
+    } catch (e) {
+      debugPrint('Keep screen on failed: $e');
+    }
+  }
+
   static Future<void> openWifiSettings() =>
       _channel.invokeMethod('openWifiSettings');
 

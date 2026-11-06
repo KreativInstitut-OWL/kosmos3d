@@ -31,6 +31,21 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "joinCameraWifi" -> cameraWifi.join(call.argument<String>("ssid") ?: "", call.argument<String>("password") ?: "", result)
+                "startCaptureService" -> {
+                    try {
+                        CaptureService.start(this, call.argument<String>("title") ?: "KOSMOS 3D")
+                        result.success(true)
+                    } catch (e: Exception) { result.error("CAPTURE_SERVICE", e.message, null) }
+                }
+                "stopCaptureService" -> { CaptureService.stop(this); result.success(true) }
+                "keepScreenOn" -> {
+                    if (call.argument<Boolean>("on") == true) {
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                    result.success(true)
+                }
                 "releaseCameraWifi" -> { cameraWifi.release(); result.success(true) }
                 "openWifiSettings" -> {
                     try {
