@@ -3,6 +3,9 @@
 This checkout needs macOS and Xcode to compile the native Swift code. Windows
 Flutter analysis and Android builds cannot validate Swift or produce an IPA.
 
+Quick install on a connected iPhone: `bash ios/run-on-iphone.sh` (free Apple ID)
+or `bash ios/run-on-iphone.sh --paid`. The manual steps are below.
+
 1. Install the Flutter version declared by `.metadata`/the project toolchain and
    Xcode with its iOS SDK. Run `flutter doctor -v` and resolve iOS requirements.
 2. Run `flutter pub get`, then `flutter build ios --debug --no-codesign` on the Mac.
