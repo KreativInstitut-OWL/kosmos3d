@@ -107,8 +107,9 @@ class _CameraSheetState extends State<_CameraSheet> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await action();
-      if (done != null)
+      if (done != null) {
         messenger.showSnackBar(SnackBar(content: AppText(done)));
+      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(

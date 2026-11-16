@@ -75,8 +75,9 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
       // Older presets used "Photo Output" / "Standard Photo".
       final format = _s.remove('Photo Output');
       if (format != null) _s['Photo Format'] ??= format;
-      if (_s['Photo Format'] == 'Standard Photo')
+      if (_s['Photo Format'] == 'Standard Photo') {
         _s['Photo Format'] = 'Standard';
+      }
       _presetName = preset.name;
     }
 
