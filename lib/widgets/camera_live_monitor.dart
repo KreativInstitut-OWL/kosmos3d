@@ -9,7 +9,10 @@ import '../services/gopro_service.dart';
 /// One real MPEG-TS/UDP preview at a time. LIVE requires a decoded first frame.
 class CameraLiveMonitor extends StatefulWidget {
   final VoidCallback? onClose;
-  const CameraLiveMonitor({super.key, this.onClose});
+
+  /// Camera to preselect (and start right away).
+  final String? initialId;
+  const CameraLiveMonitor({super.key, this.onClose, this.initialId});
   @override
   State<CameraLiveMonitor> createState() => _CameraLiveMonitorState();
 }
@@ -17,7 +20,8 @@ class CameraLiveMonitor extends StatefulWidget {
 class _CameraLiveMonitorState extends State<CameraLiveMonitor>
     with WidgetsBindingObserver {
   GoProService? _service;
-  String? _selected, _playingId;
+  late String? _selected = widget.initialId;
+  String? _playingId;
   String _status = 'Choose a camera to frame your shot.';
   bool _showPlayer = false, _busy = false, _live = false;
   Timer? _poll;
@@ -30,7 +34,11 @@ class _CameraLiveMonitorState extends State<CameraLiveMonitor>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final first = _service == null;
     _service = context.read<GoProService>();
+    if (first && widget.initialId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _start());
+    }
   }
 
   @override
@@ -210,8 +218,10 @@ class _CameraLiveMonitorState extends State<CameraLiveMonitor>
               style: const TextStyle(color: Colors.white),
               items: cameras
                   .map(
-                    (c) =>
-                        DropdownMenuItem(value: c.id, child: AppText(c.name)),
+                    (c) => DropdownMenuItem(
+                      value: c.id,
+                      child: AppText(c.displayName),
+                    ),
                   )
                   .toList(),
               onChanged: _busy || _showPlayer

@@ -126,7 +126,7 @@ class CaptureCoordinator extends ChangeNotifier {
         'Ready - BLE settings verified; check manual exposure and mounting',
       );
     } catch (e) {
-      error = '$e';
+      error = describeError(e);
       _state(CapturePhase.fault, error!);
       rethrow;
     } finally {
@@ -191,7 +191,7 @@ class CaptureCoordinator extends ChangeNotifier {
           await c.start();
           record['ackOffsetUs'] = clock.elapsedMicroseconds;
         } catch (e) {
-          record['error'] = '$e';
+          record['error'] = describeError(e);
           rethrow;
         }
       }),
@@ -228,7 +228,7 @@ class CaptureCoordinator extends ChangeNotifier {
           await c.start();
           record['ackOffsetUs'] = clock.elapsedMicroseconds;
         } catch (e) {
-          record['error'] = '$e';
+          record['error'] = describeError(e);
           rethrow;
         }
       }),
@@ -276,7 +276,7 @@ class CaptureCoordinator extends ChangeNotifier {
     final failures = await _stopEveryCamera();
     _active = failures.isNotEmpty;
     error =
-        '$cause${failures.isEmpty ? '' : '; stop unconfirmed: ${failures.join(', ')}'}';
+        '${describeError(cause)}${failures.isEmpty ? '' : '; stop unconfirmed: ${failures.join(', ')}'}';
     _state(CapturePhase.fault, error!);
   }
 
@@ -287,7 +287,7 @@ class CaptureCoordinator extends ChangeNotifier {
         try {
           await c.stop();
         } catch (e) {
-          failures.add('${c.id}: $e');
+          failures.add('${c.id}: ${describeError(e)}');
         }
       }),
     );
@@ -319,7 +319,7 @@ class CaptureCoordinator extends ChangeNotifier {
         error == null ? 'Stopped' : 'Stopped - synchronize again',
       );
     } catch (e) {
-      error = '$e';
+      error = describeError(e);
       _state(CapturePhase.fault, error!);
       rethrow;
     } finally {
@@ -361,3 +361,11 @@ class CaptureCoordinator extends ChangeNotifier {
     super.dispose();
   }
 }
+
+/// Error text for the UI without Dart's "Bad state:" / "Exception:" prefixes.
+String describeError(Object e) => '$e'.replaceFirst(
+  RegExp(
+    r'^(Bad state|Exception|Unsupported operation|TimeoutException[^:]*): ',
+  ),
+  '',
+);

@@ -2,6 +2,7 @@ import 'dart:async';
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../services/capture_options.dart';
 
 /// GoPro Labs video recipe. No shutter/start command is included.
 /// Linear lens is subsequently set and verified by BLE (setting 121).
@@ -159,6 +160,99 @@ class _ExposureLabsDialogState extends State<_ExposureLabsDialog> {
               'Stock firmware ignores this code. Then set ISO and white balance once in each camera’s Protune menu.',
               style: TextStyle(color: Colors.orange, fontSize: 12),
             ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const AppText('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Labs QR with every exposure target of a project or preset. The clock in
+/// the code is refreshed continuously so cameras also get the phone's time.
+Future<void> showSettingsLabsQr(
+  BuildContext context,
+  Map<String, String> settings,
+) => showDialog<void>(
+  context: context,
+  builder: (_) => _SettingsLabsDialog(settings: settings),
+);
+
+class _SettingsLabsDialog extends StatefulWidget {
+  const _SettingsLabsDialog({required this.settings});
+  final Map<String, String> settings;
+
+  @override
+  State<_SettingsLabsDialog> createState() => _SettingsLabsDialogState();
+}
+
+class _SettingsLabsDialogState extends State<_SettingsLabsDialog> {
+  late final Timer _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tick.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recipe = labsRecipe(widget.settings, now: DateTime.now());
+    return AlertDialog(
+      title: const AppText('Exposure QR (GoPro Labs)'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppText(exposureSummary(widget.settings)),
+            const SizedBox(height: 8),
+            if (recipe == null)
+              const AppText(
+                'All exposure values are "Camera preset" - nothing to send.',
+              )
+            else ...[
+              const AppText(
+                'Hold the QR in front of each camera until it beeps. Needs GoPro Labs firmware; without Labs, set these values on each camera.',
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  color: Colors.white,
+                  padding: const EdgeInsets.all(12),
+                  child: QrImageView(data: recipe, size: 230),
+                ),
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                recipe,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
+              if (widget.settings['Mode'] != 'video' &&
+                  (widget.settings['Target Shutter'] ?? keepCamera) !=
+                      keepCamera)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: AppText(
+                    'Labs sets the shutter for video only. For photos set it on the camera.',
+                    style: TextStyle(color: Colors.orange),
+                  ),
+                ),
+            ],
           ],
         ),
       ),

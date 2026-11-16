@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kosmos3d/models/camera_device.dart';
 import 'package:kosmos3d/models/scan_project.dart';
 import 'package:kosmos3d/providers/settings_provider.dart';
 import 'package:kosmos3d/screens/project_flow.dart';
@@ -12,6 +13,9 @@ import 'package:kosmos3d/services/project_service.dart';
 class FakeRig extends GoProService {
   final gate = Completer<void>();
   int prepares = 0;
+  final _cams = [CameraDevice(id: 'cam1', name: 'GoPro 1', isConnected: true)];
+  @override
+  List<CameraDevice> get devices => _cams;
   @override
   Future<void> prepareCapture(String mode, Map<String, String> settings) async {
     prepares++;
@@ -56,20 +60,20 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField), 'Test scan');
-      tester.widget<Stepper>(find.byType(Stepper)).onStepContinue!();
+      await tester.enterText(find.byType(TextField).first, 'Test scan');
       await tester.pumpAndSettle();
-      tester.widget<Stepper>(find.byType(Stepper)).onStepContinue!();
+      final start = find.text('Start Capture');
+      await tester.scrollUntilVisible(
+        start,
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.pumpAndSettle();
-      final start = find.text('Start Capture').last;
-      await tester.ensureVisible(start);
-      await tester.pumpAndSettle();
-      if (tester.getCenter(start).dy > 550) {
-        await tester.drag(find.byType(Stepper), const Offset(0, -300));
-        await tester.pumpAndSettle();
-      }
       await tester.tap(start);
-      await tester.tap(start);
+      await tester.pump();
+      // The button is replaced by progress, so a second tap cannot land.
+      expect(find.text('Start Capture'), findsNothing);
+      await tester.tap(find.byType(ListView).first, warnIfMissed: false);
       await tester.pump();
       expect(rig.prepares, 1);
       expect(projects.creates, 0);

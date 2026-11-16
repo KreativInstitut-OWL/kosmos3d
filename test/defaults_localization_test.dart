@@ -6,7 +6,7 @@ import 'package:kosmos3d/l10n/ui_dictionary.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
-    'new installations use English, one second, outdoor photo and coverage',
+    'new installations use English, one second, KIO preset and coverage',
     () async {
       SharedPreferences.setMockInitialValues({});
       final settings = SettingsProvider();
@@ -15,13 +15,15 @@ void main() {
       expect(settings.currentLanguage, 'en');
       expect(settings.captureInterval, '1s');
       expect(settings.coverageVisualizer, true);
-      expect(defaults['Mode'], 'photo');
-      expect(defaults['Photo Format'], 'Standard Photo');
+      // KIO: 5.3K video, Linear, ISO 200, 1/500 s.
+      expect(defaults['Mode'], 'video');
+      expect(defaults['Resolution'], '5.3K');
       expect(defaults['Lens'], 'Linear');
-      expect(defaults['Target ISO'], '100');
+      expect(defaults['Target ISO'], '200');
+      expect(defaults['Target Shutter'], '1/500');
       expect(defaults['Orientation'], 'Portrait');
-      // A recommendation must never masquerade as a verified API override.
-      expect(defaults['ISO Max'], 'Camera preset');
+      // Exposure is a Labs/QR target, never a BLE override.
+      expect(defaults['ISO Max'], isNull);
       settings.dispose();
     },
   );

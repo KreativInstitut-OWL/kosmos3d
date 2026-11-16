@@ -21,6 +21,7 @@ import '../services/orientation_service.dart';
 import '../widgets/gopro_media_transfer_dialog.dart';
 
 import '../widgets/camera_live_monitor.dart';
+import '../widgets/camera_bar.dart';
 import 'point_cloud_preview.dart';
 import 'project_flow.dart';
 import '../services/lidar_service.dart';
@@ -522,59 +523,10 @@ class _CaptureSessionScreenState extends State<CaptureSessionScreen>
                     ),
                   ),
 
-                  // ─── Camera Status Strip ───
-                  SizedBox(
-                    height: 50,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: connectedCams.length,
-                      itemBuilder: (context, index) {
-                        final cam = connectedCams[index];
-                        return Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: primaryColor.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.camera_alt,
-                                size: 14,
-                                color: primaryColor,
-                              ),
-                              const SizedBox(width: 6),
-                              AppText(
-                                cam.name,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              AppText(
-                                '${cam.batteryLevel}%',
-                                style: TextStyle(
-                                  color: cam.batteryLevel > 20
-                                      ? Colors.white54
-                                      : Colors.redAccent,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                  // ─── Cameras: tap for rename, locate, live view ───
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: CameraBar(dark: true),
                   ),
 
                   const SizedBox(height: 8),

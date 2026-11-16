@@ -1,5 +1,6 @@
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
+import '../services/capture_options.dart';
 import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../widgets/glass_card.dart';
@@ -632,7 +633,7 @@ class SettingsScreen extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: AppText(
-                      'Version 2.0.0 · Sam Wiemann · kreativ.institute',
+                      'Version $appVersion (build $appBuild) · Sam Wiemann · kreativ.institute',
                     ),
                   ),
                   ListTile(
@@ -752,8 +753,31 @@ class SettingsScreen extends StatelessWidget {
     SettingsProvider settings,
   ) {
     final nameCtrl = TextEditingController();
-    String resolution = '4K', fps = '30', lens = 'Linear';
-    String isoMax = '400', shutter = 'Auto', wb = '5500K', bitrate = 'High';
+    // Start from KIO; every option the project page offers is available.
+    final s = Map<String, String>.of(
+      SettingsProvider.builtInPresets.first.settings,
+    )..remove('Guidance');
+    List<(String, String, List<String>)> rows() => [
+      if (s['Mode'] == 'video') ...[
+        ('Resolution', 'Resolution', CaptureOptions.resolutions),
+        ('Frame rate', 'FPS', CaptureOptions.fps),
+        ('Lens', 'Lens', CaptureOptions.videoLenses),
+        ('Bitrate', 'Bitrate', CaptureOptions.bitrates),
+        ('Stabilization', 'Hypersmooth', CaptureOptions.hypersmooth),
+        ('Bit depth', 'Bit Depth', CaptureOptions.bitDepth),
+      ] else ...[
+        ('Photo format', 'Photo Format', CaptureOptions.photoFormats),
+        ('Interval', 'Interval', CaptureOptions.intervals),
+        ('Lens', 'Lens', CaptureOptions.photoLenses),
+      ],
+      ('ISO min', 'Target ISO Min', CaptureOptions.iso),
+      ('ISO max', 'Target ISO', CaptureOptions.iso),
+      ('Shutter', 'Target Shutter', CaptureOptions.shutter),
+      ('White balance', 'Target White Balance', CaptureOptions.whiteBalance),
+      ('EV', 'Target EV', CaptureOptions.ev),
+      ('Color', 'Target Color', CaptureOptions.color),
+      ('Sharpness', 'Target Sharpness', CaptureOptions.sharpness),
+    ];
 
     showDialog(
       context: context,
@@ -776,48 +800,30 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _dropdownRow(ctx, 'Resolution', resolution, [
-                  '1080p',
-                  '2.7K',
-                  '4K',
-                  '5.3K',
-                ], (v) => setState(() => resolution = v)),
-                _dropdownRow(ctx, 'FPS', fps, [
-                  '24',
-                  '30',
-                  '60',
-                  '120',
-                ], (v) => setState(() => fps = v)),
-                _dropdownRow(ctx, 'Lens', lens, [
-                  'Linear',
-                  'Wide',
-                  'SuperView',
-                ], (v) => setState(() => lens = v)),
-                _dropdownRow(ctx, 'Target ISO (manual)', isoMax, [
-                  '100',
-                  '200',
-                  '400',
-                  '800',
-                  '1600',
-                ], (v) => setState(() => isoMax = v)),
-                _dropdownRow(ctx, 'Target shutter (manual)', shutter, [
-                  'Auto',
-                  '1/60',
-                  '1/120',
-                  '1/240',
-                  '1/480',
-                ], (v) => setState(() => shutter = v)),
-                _dropdownRow(ctx, 'Target white balance (manual)', wb, [
-                  'Auto',
-                  '3200K',
-                  '4000K',
-                  '5500K',
-                  '6500K',
-                ], (v) => setState(() => wb = v)),
-                _dropdownRow(ctx, 'Bitrate', bitrate, [
-                  'Standard',
-                  'High',
-                ], (v) => setState(() => bitrate = v)),
+                _dropdownRow(
+                  ctx,
+                  'Mode',
+                  s['Mode'] ?? 'video',
+                  const ['video', 'photo'],
+                  (v) => setState(() {
+                    s['Mode'] = v;
+                    if (v == 'photo') {
+                      s['Interval'] = '1s';
+                      s['Interval Timing'] = 'Camera timer';
+                      s['Photo Format'] = 'Standard';
+                    } else {
+                      s['Interval'] = 'Off';
+                    }
+                  }),
+                ),
+                for (final (label, key, options) in rows())
+                  _dropdownRow(
+                    ctx,
+                    label,
+                    options.contains(s[key]) ? s[key]! : options.first,
+                    options,
+                    (v) => setState(() => s[key] = v),
+                  ),
               ],
             ),
           ),
@@ -829,23 +835,14 @@ class SettingsScreen extends StatelessWidget {
             ElevatedButton(
               onPressed: () {
                 if (nameCtrl.text.trim().isEmpty) return;
+                for (final (_, key, options) in rows()) {
+                  if (!options.contains(s[key])) s[key] = options.first;
+                }
                 settings.addCustomPreset(
                   CameraPreset(
                     name: nameCtrl.text.trim(),
                     icon: '⭐',
-                    settings: {
-                      'Resolution': resolution,
-                      'FPS': fps,
-                      'Lens': lens,
-                      'Mode': 'video',
-                      'ISO Max': 'Camera preset',
-                      'Target ISO': isoMax,
-                      'Shutter': 'Camera preset',
-                      'Target Shutter': shutter,
-                      'White Balance': 'Camera preset',
-                      'Target White Balance': wb,
-                      'Bitrate': bitrate,
-                    },
+                    settings: Map.of(s),
                   ),
                 );
                 Navigator.pop(ctx);

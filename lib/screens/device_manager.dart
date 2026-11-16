@@ -2,6 +2,7 @@ import '../l10n/app_text.dart';
 import 'rig_settings_screen.dart';
 import 'rig_control_screen.dart';
 import 'package:flutter/material.dart';
+import '../widgets/camera_bar.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../models/camera_device.dart';
@@ -433,25 +434,25 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
             // ─── Header: Name + Connection Status ───
             InkWell(
               onTap: cam.isConnected
-                  ? null
+                  ? () => showCameraSheet(context, cam.id)
                   : () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: AppText(
-                            '${settings.translate('connecting')} ${cam.name}...',
+                            '${settings.translate('connecting')} ${cam.displayName}...',
                           ),
                         ),
                       );
                       _guard(
                         () => goPro.connectToDevice(cam.id),
-                        done: '${cam.name} connected',
+                        done: '${cam.displayName} connected',
                       );
                     },
               onLongPress: cam.isConnected
                   ? null
                   : () => _guard(
                       () => goPro.forgetCamera(cam.id),
-                      done: '${cam.name} removed from this phone',
+                      done: '${cam.displayName} removed from this phone',
                     ),
               borderRadius: BorderRadius.circular(8),
               child: Row(
@@ -503,7 +504,7 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         AppText(
-                          cam.name,
+                          cam.displayName,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
@@ -604,63 +605,34 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                 }).toList(),
               ),
               const SizedBox(height: 12),
-              // Action buttons
+              // Most-used actions; everything else is on the camera sheet.
               Row(
                 children: [
                   _buildActionButton(
-                    icon: Icons.photo_camera,
-                    label: 'Photo',
+                    icon: goPro.isLocating(cam.id)
+                        ? Icons.notifications_off
+                        : Icons.notifications_active,
+                    label: goPro.isLocating(cam.id) ? 'Stop' : 'Locate',
+                    color: goPro.isLocating(cam.id) ? Colors.orange : null,
                     onTap: () => _guard(
-                      () => goPro.selectMode(cam.id, 16),
-                      done: 'Switched to Photo mode',
+                      () => goPro.setLocate(cam.id, !goPro.isLocating(cam.id)),
                     ),
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
-                    icon: Icons.videocam,
-                    label: 'Video',
-                    onTap: () => _guard(
-                      () => goPro.selectMode(cam.id, 12),
-                      done: 'Switched to Video mode',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: cam.isRecording ? Icons.stop : Icons.circle,
-                    label: cam.isRecording ? 'Stop' : 'Shutter',
-                    color: cam.isRecording ? Colors.redAccent : null,
-                    onTap: () => _guard(
-                      () => goPro.toggleRecording(cam.id, !cam.isRecording),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.settings_remote,
-                    label: 'Controls',
-                    color: primaryColor,
+                    icon: Icons.live_tv,
+                    label: 'Live view',
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => RigControlScreen(only: cam.id),
+                        builder: (_) => LiveViewScreen(cameraId: cam.id),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildActionButton(
-                    icon: Icons.link_off,
-                    label: settings.translate('disconnect'),
-                    color: Colors.orange,
-                    onTap: () =>
-                        _guard(() => goPro.releaseAndDisconnect(cam.id)),
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
                     icon: Icons.key,
-                    label: 'Wi-Fi password',
+                    label: 'Wi-Fi',
                     color: Colors.lightBlueAccent,
                     onTap: () => showDialog(
                       context: context,
@@ -669,12 +641,10 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildActionButton(
-                    icon: Icons.bedtime_outlined,
-                    label: 'Sleep',
-                    onTap: () => _guard(
-                      () => goPro.sleepCamera(cam.id),
-                      done: 'Camera sleeps. Tap it to wake it.',
-                    ),
+                    icon: Icons.more_horiz,
+                    label: 'More',
+                    color: primaryColor,
+                    onTap: () => showCameraSheet(context, cam.id),
                   ),
                 ],
               ),

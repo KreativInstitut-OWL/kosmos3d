@@ -92,92 +92,99 @@ class SettingsProvider extends ChangeNotifier {
   // ─── BUILT-IN PRESETS ────────────────────────────────────
   static const List<CameraPreset> builtInPresets = [
     CameraPreset(
-      name: 'Outdoor Scan',
+      name: 'KIO',
+      icon: '🎥',
+      settings: {
+        'Mode': 'video',
+        'Resolution': '5.3K',
+        'FPS': '30',
+        'Lens': 'Linear',
+        'Bitrate': 'High',
+        'Hypersmooth': 'Off',
+        'Interval': 'Off',
+        'Orientation': 'Portrait',
+        'Target ISO Min': '200',
+        'Target ISO': '200',
+        'Target Shutter': '1/500',
+        'Target White Balance': '5500K',
+        'Target Color': 'Flat',
+        'Guidance':
+            'KIO standard: 5.3K / 30 fps video, Linear, fixed ISO 200 and 1/500 s, stabilization off. Show the exposure QR to every camera (GoPro Labs) or set ISO and shutter on each camera. Needs good light.',
+      },
+    ),
+    CameraPreset(
+      name: 'Outdoor Photo',
       icon: '🌳',
       settings: {
         'Mode': 'photo',
-        'Photo Format': 'Standard Photo',
+        'Photo Format': 'Standard',
         'Interval': '1s',
         'Interval Timing': 'Camera timer',
         'Lens': 'Linear',
-        'ISO Max': 'Camera preset',
-        'Shutter': 'Camera preset',
-        'White Balance': 'Camera preset',
         'Orientation': 'Portrait',
-        'Target ISO': '100',
+        'Target ISO Min': '100',
+        'Target ISO': '200',
+        'Target White Balance': '5500K',
+        'Target Color': 'Flat',
         'Guidance':
-            'Bright daylight: ISO 100 on every camera, fixed white balance, portrait mounting. If moving, use a fast photo shutter; in shade add light or raise ISO. Check actual images for blur and clipping.',
+            'Daylight photo scan: 1 s camera timer, Linear, low ISO, fixed daylight white balance. Walk slowly; check the first images for blur.',
       },
     ),
     CameraPreset(
-      name: 'Interior Scan',
+      name: 'Interior Photo',
       icon: '🏠',
       settings: {
         'Mode': 'photo',
-        'Photo Format': 'Standard Photo',
+        'Photo Format': 'Standard',
         'Interval': '2s',
+        'Interval Timing': 'Camera timer',
         'Lens': 'Linear',
-        'ISO Max': 'Camera preset',
-        'Shutter': 'Camera preset',
-        'White Balance': 'Camera preset',
         'Orientation': 'Portrait',
-        'Target ISO': '100–400',
+        'Target ISO Min': '100',
+        'Target ISO': '800',
+        'Target White Balance': '4000K',
+        'Target Color': 'Flat',
         'Guidance':
-            'Use consistent added light and fixed white balance. Pause before each photo; ISO 100 is unsuitable if it produces motion blur or underexposure.',
+            'Indoor photo scan: 2 s interval, Linear, ISO up to 800 and fixed white balance. Add even light and pause briefly for each shot.',
       },
     ),
     CameraPreset(
-      name: 'Detail Scan',
+      name: 'Detail Photo',
       icon: '🔬',
       settings: {
         'Mode': 'photo',
-        'Photo Format': 'Standard Photo',
+        'Photo Format': 'RAW',
         'Interval': '2s',
+        'Interval Timing': 'Camera timer',
         'Lens': 'Linear',
-        'ISO Max': 'Camera preset',
-        'Shutter': 'Camera preset',
-        'White Balance': 'Camera preset',
         'Orientation': 'Portrait',
-        'Target ISO': '100',
+        'Target ISO Min': '100',
+        'Target ISO': '400',
+        'Target White Balance': '5500K',
+        'Target Sharpness': 'Low',
         'Guidance':
-            'Move slowly with high overlap. Stay beyond the camera minimum focus distance. Use RAW only if supported with the chosen lens and allow longer processing.',
+            'Close-up objects: RAW + Linear, high overlap, stay beyond the minimum focus distance. Low in-camera sharpening keeps texture natural.',
       },
     ),
     CameraPreset(
-      name: 'Video Walk',
+      name: 'Video Walk 4K',
       icon: '🎬',
       settings: {
         'Mode': 'video',
         'Resolution': '4K',
         'FPS': '30',
         'Lens': 'Linear',
-        'ISO Max': 'Camera preset',
-        'Shutter': 'Camera preset',
-        'White Balance': 'Camera preset',
         'Bitrate': 'High',
+        'Hypersmooth': 'Off',
         'Interval': 'Off',
         'Orientation': 'Portrait',
-        'Target ISO': '100–400',
+        'Target ISO Min': '100',
+        'Target ISO': '400',
+        'Target Shutter': '1/240',
+        'Target White Balance': '5500K',
+        'Target Color': 'Flat',
         'Guidance':
-            'Use a fast shutter in good light and disable stabilization on each camera for consistent calibration. 30 fps reduces heat and redundant frames; 60 fps needs more light and storage.',
-      },
-    ),
-    CameraPreset(
-      name: 'Gaussian Video (Labs)',
-      icon: '☀',
-      settings: {
-        'Mode': 'video',
-        'Labs Recipe': 'daylight',
-        'Resolution': '4K',
-        'FPS': '30',
-        'Lens': 'Linear',
-        'ISO Max': 'Camera preset',
-        'Shutter': 'Camera preset',
-        'White Balance': 'Camera preset',
-        'Bitrate': 'High',
-        'Interval': 'Off',
-        'Guidance':
-            'Requires GoPro Labs firmware. Inspect the QR recipe on every camera before capture.',
+            'Lighter files than KIO: 4K / 30 fps, 1/240 s against motion blur, stabilization off for consistent calibration.',
       },
     ),
   ];
@@ -392,7 +399,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<Map<String, String>> getDefaultSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString('default_camera_settings');
+    final json = prefs.getString('default_camera_settings_v2');
     if (json != null) {
       try {
         return Map<String, String>.from(jsonDecode(json));
@@ -403,7 +410,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setDefaultSettings(Map<String, String> settings) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('default_camera_settings', jsonEncode(settings));
+    await prefs.setString('default_camera_settings_v2', jsonEncode(settings));
     notifyListeners();
   }
 }

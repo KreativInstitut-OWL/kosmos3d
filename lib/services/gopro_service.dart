@@ -76,17 +76,53 @@ class GoProSettings {
     '5.3K': 100,
   };
 
+  /// Setting-2 values per resolution; newer models use the "V2" ids.
+  static const Map<String, List<int>> resolutionCandidates = {
+    '1080p': [9],
+    '2.7K': [4],
+    '2.7K 4:3': [6, 111],
+    '4K': [1],
+    '4K 4:3': [18, 112],
+    '4K 8:7': [28, 108],
+    '5.3K': [100],
+    '5.3K 4:3': [27, 113],
+    '5.3K 8:7': [26, 107],
+  };
+
   // Setting ID 3: FPS
   static const int fpsId = 3;
-  static const Map<String, int> fps = {'24': 10, '30': 8, '60': 5, '120': 0};
+  static const Map<String, int> fps = {
+    '24': 10,
+    '25': 9,
+    '30': 8,
+    '50': 6,
+    '60': 5,
+    '100': 2,
+    '120': 1,
+    '200': 13,
+    '240': 0,
+  };
 
   // Setting ID 121: Digital Lens (Video)
   static const int videoLensId = 121;
   static const Map<String, int> videoLens = {
     'Wide': 0,
-    'Linear': 4,
+    'Narrow': 2,
     'SuperView': 3,
+    'Linear': 4,
+    'Linear + Horizon Leveling': 8,
+    'HyperView': 9,
+    'Linear + Horizon Lock': 10,
   };
+
+  static const Map<String, int> hypersmooth = {
+    'Off': 0,
+    'Low': 1,
+    'High': 2,
+    'Boost': 3,
+    'Auto boost': 4,
+  };
+  static const Map<String, int> bitDepth = {'8 bit': 0, '10 bit': 2};
 
   // Setting ID 122: Digital Lens (Photo)
   static const int photoLensId = 122;
@@ -95,7 +131,7 @@ class GoProSettings {
   // Protune IDs are not part of the published Open GoPro setting table.
   // Never send speculative registers for ISO, WB or shutter.
   static const int bitrateId = 182;
-  static const Map<String, int> bitrate = {'Standard': 0, 'High': 1};
+  static const Map<String, int> bitrate = {'Standard': 0, 'High': 1, 'Max': 2};
 
   // Setting ID 125: Photo Output (Standard, RAW, HDR, SuperPhoto)
   static const int photoOutputId = 125;
@@ -469,6 +505,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
                   CameraDevice(
                     id: r.device.remoteId.str,
                     name: deviceName,
+                    customName: _nicknames[r.device.remoteId.str],
                     isConnected: false,
                     batteryLevel: 0,
                     storageRemaining: 'Unknown',
@@ -868,6 +905,8 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       3: 'Frame rate',
       234: 'Frame rate',
       121: 'Video lens',
+      135: 'Hypersmooth',
+      183: 'Bit depth',
       122: 'Photo lens',
       125: 'Photo output',
       171: 'Photo interval',
@@ -888,11 +927,22 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         'Camera $id does not support setting $settingId=$value in this preset',
       );
     }
-    await _protocol(id).exchange('setting', [settingId, 1, value]);
-    await _waitIdle(id);
-    final readback = await _query(id, 0x12, [settingId]);
-    if (readback[settingId] == null ||
-        bigEndian(readback[settingId]!) != value) {
+    var confirmed = false;
+    for (var attempt = 0; attempt < 3 && !confirmed; attempt++) {
+      await _protocol(id).exchange('setting', [settingId, 1, value]);
+      await _waitIdle(id);
+      final sw = Stopwatch()..start();
+      while (sw.elapsed < const Duration(seconds: 2)) {
+        final readback = await _query(id, 0x12, [settingId]);
+        if (readback[settingId] != null &&
+            bigEndian(readback[settingId]!) == value) {
+          confirmed = true;
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+    if (!confirmed) {
       throw StateError('Camera $id did not confirm setting $settingId=$value');
     }
     (_verified[id] ??= {})[settingId] = value;
@@ -1834,13 +1884,16 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         }
       }
     } else {
-      if (settings['Resolution'] != null) {
-        await _writeSetting(
-          id,
-          2,
-          GoProSettings.resolution[settings['Resolution']] ??
-              (throw ArgumentError('Resolution')),
-        );
+      final res = settings['Resolution'];
+      if (res != null) {
+        final candidates =
+            GoProSettings.resolutionCandidates[res] ??
+            (throw ArgumentError('Resolution $res'));
+        final supported = await _capabilities(id, 2);
+        final value =
+            candidates.where(supported.contains).firstOrNull ??
+            (throw UnsupportedError('Camera $id cannot record $res'));
+        await _writeSetting(id, 2, value);
       }
       if (settings['FPS'] != null) {
         final fps =
@@ -1861,6 +1914,22 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
           GoProSettings.bitrate[settings['Bitrate']] ??
               (throw ArgumentError('Bitrate')),
         );
+      }
+      // Optional: written only when the camera offers the setting at all.
+      for (final (key, name, map) in [
+        (135, 'Hypersmooth', GoProSettings.hypersmooth),
+        (183, 'Bit Depth', GoProSettings.bitDepth),
+      ]) {
+        final value = map[settings[name]];
+        if (value == null) continue;
+        final offered = (await _capabilityMap(id, [key]))[key];
+        if (offered == null || offered.isEmpty) continue;
+        if (!offered.contains(value)) {
+          throw UnsupportedError(
+            'Camera $id cannot use $name ${settings[name]} here',
+          );
+        }
+        await _writeSetting(id, key, value);
       }
       // Continuous recording: no duration limit (100) and HindSight off (4).
       final capabilities = await _capabilityMap(id, [156, 167]);
@@ -1939,10 +2008,33 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
 
   @override
   Future<void> triggerShutter(String id) async {
-    await _protocol(id).exchange('command', [1, 1, 1]);
-    if (_expectedModes[id] == 12 && await _status(id, 10) != 1) {
-      throw StateError('Camera $id did not confirm video recording');
+    // A camera still busy from the last action rejects the shutter; wait and
+    // retry instead of failing the whole rig.
+    Future<void> press() async {
+      for (var i = 0; ; i++) {
+        try {
+          await _protocol(id).exchange('command', [1, 1, 1]);
+          return;
+        } on GoProRejected {
+          if (i >= 4) rethrow;
+          await Future<void>.delayed(const Duration(milliseconds: 400));
+        }
+      }
     }
+
+    await press();
+    if (_expectedModes[id] != 12) return;
+    // Cameras need up to a few seconds to start encoding; poll, and resend the
+    // shutter once if the first command was swallowed while the camera was busy.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await press();
+      final sw = Stopwatch()..start();
+      while (sw.elapsed < const Duration(seconds: 4)) {
+        if (await _status(id, 10) == 1) return;
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+    throw StateError('Camera $id did not confirm video recording');
   }
 
   @override
@@ -2043,6 +2135,50 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   Future<void> startCapture(String id) async {
     await _waitIdle(id);
     await triggerShutter(id);
+  }
+
+  // ─── NAMES AND LOCATE ──────────────────────────────────────
+
+  /// App-side camera names (GoPro offers no BLE rename), keyed by device id.
+  final Map<String, String> _nicknames = {};
+
+  Future<void> renameCamera(String id, String name) async {
+    name = name.trim();
+    final prefs = await SharedPreferences.getInstance();
+    if (name.isEmpty) {
+      _nicknames.remove(id);
+      await prefs.remove('cam_name_$id');
+    } else {
+      _nicknames[id] = name;
+      await prefs.setString('cam_name_$id', name);
+    }
+    final i = _devices.indexWhere((d) => d.id == id);
+    if (i >= 0) {
+      final d = _devices[i];
+      _devices[i] = CameraDevice(
+        id: d.id,
+        name: d.name,
+        customName: name.isEmpty ? null : name,
+        isConnected: d.isConnected,
+        batteryLevel: d.batteryLevel,
+        storageRemaining: d.storageRemaining,
+        isRecording: d.isRecording,
+        isWifiConnected: d.isWifiConnected,
+        wifiIpAddress: d.wifiIpAddress,
+        currentSettings: d.currentSettings,
+      );
+    }
+    notifyListeners();
+  }
+
+  final Set<String> _locating = {};
+  bool isLocating(String id) => _locating.contains(id);
+
+  /// Locate: the camera beeps and blinks until switched off (command 0x16).
+  Future<void> setLocate(String id, bool on) async {
+    await _protocol(id).exchange('command', [0x16, 1, on ? 1 : 0]);
+    on ? _locating.add(id) : _locating.remove(id);
+    notifyListeners();
   }
 
   /// HiLight tag in the running video (camera must be recording).
@@ -2246,6 +2382,9 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     if (!_isMobilePlatform) return;
     final prefs = await SharedPreferences.getInstance();
     _keepAwake = prefs.getBool('keep_cameras_awake') ?? true;
+    for (final key in prefs.getKeys().where((k) => k.startsWith('cam_name_'))) {
+      _nicknames[key.substring(9)] = prefs.getString(key) ?? '';
+    }
     final known = prefs.getStringList(_knownKey) ?? [];
     for (final entry in known) {
       final split = entry.indexOf('|');
@@ -2253,7 +2392,14 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       final id = entry.substring(0, split), name = entry.substring(split + 1);
       if (_devices.any((d) => d.id == id)) continue;
       _bleDevices[id] = BluetoothDevice.fromId(id);
-      _devices.add(CameraDevice(id: id, name: name, batteryLevel: 0));
+      _devices.add(
+        CameraDevice(
+          id: id,
+          name: name,
+          customName: _nicknames[id],
+          batteryLevel: 0,
+        ),
+      );
     }
     notifyListeners();
   }
@@ -2271,7 +2417,9 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         (prefs.getStringList(_knownKey) ?? [])
             .where((e) => !e.startsWith('$id|'))
             .toList()
-          ..add('$id|${nameOf(id)}');
+          ..add(
+            '$id|${_devices.where((d) => d.id == id).firstOrNull?.name ?? id}',
+          );
     await prefs.setStringList(_knownKey, known);
   }
 
