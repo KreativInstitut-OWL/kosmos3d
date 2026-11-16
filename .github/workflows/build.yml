@@ -92,7 +92,10 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }} --dart-define=APP_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//') --dart-define=APP_BUILD=${{ github.run_number }}
+      - name: Build iOS
+        run: |
+          version=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')
+          flutter build ios --release --no-codesign --build-number=${{ github.run_number }} --dart-define=APP_VERSION=$version --dart-define=APP_BUILD=${{ github.run_number }}
       # An unsigned .ipa. Sign it with your Apple ID (Sideloadly, AltStore)
       # or open ios/Runner.xcworkspace in Xcode and sign with your team.
       - name: Package unsigned IPA
