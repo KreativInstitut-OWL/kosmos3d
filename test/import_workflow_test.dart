@@ -39,6 +39,7 @@ class ImportRig extends GoProService {
     List<GoProMediaItem> items, {
     required String targetCapturesDirectory,
     bool saveToNativeGallery = true,
+    String? projectName,
     Function(int, int, double, String)? onProgress,
   }) async => items.length;
 }

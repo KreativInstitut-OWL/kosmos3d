@@ -10,7 +10,8 @@ class CameraDevice {
   String? wifiIpAddress;
   Map<String, String> currentSettings;
 
-  String get displayName => customName != null && customName!.isNotEmpty ? customName! : name;
+  String get displayName =>
+      customName != null && customName!.isNotEmpty ? customName! : name;
 
   CameraDevice({
     required this.id,

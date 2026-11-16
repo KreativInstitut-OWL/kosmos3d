@@ -15,12 +15,12 @@ void main() {
       expect(settings.currentLanguage, 'en');
       expect(settings.captureInterval, '1s');
       expect(settings.coverageVisualizer, true);
-      // KIO: 5.3K video, Linear, ISO 200, 1/500 s.
+      // KIO: 5.3K video, Linear, ISO 200, 1/480 s.
       expect(defaults['Mode'], 'video');
       expect(defaults['Resolution'], '5.3K');
       expect(defaults['Lens'], 'Linear');
       expect(defaults['Target ISO'], '200');
-      expect(defaults['Target Shutter'], '1/500');
+      expect(defaults['Target Shutter'], '1/480');
       expect(defaults['Orientation'], 'Portrait');
       // Exposure is a Labs/QR target, never a BLE override.
       expect(defaults['ISO Max'], isNull);

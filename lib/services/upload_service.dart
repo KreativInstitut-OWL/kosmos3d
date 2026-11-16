@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'file_hash.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -186,8 +186,7 @@ class UploadService extends ChangeNotifier {
         _statusMessage = 'Checking ${entry.relative}';
         notifyListeners();
         final length = await entry.file.length();
-        final digest = (await sha256.bind(entry.file.openRead()).first)
-            .toString();
+        final digest = await sha256OfFile(entry.file.path);
         _checkCancelled();
         final usePut = config['transport'] == 'kosmos';
         final uri = usePut

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'file_naming.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,7 +53,7 @@ class RigCamera {
 /// Exports per-capture world poses for each camera.
 class RigGeometryService extends ChangeNotifier {
   final List<RigCamera> _cameras = [];
-  String _namingTemplate = '{project}_{camera}_{index}';
+  String _namingTemplate = defaultNamingTemplate;
 
   List<RigCamera> get cameras => List.unmodifiable(_cameras);
   String get namingTemplate => _namingTemplate;
@@ -63,8 +64,12 @@ class RigGeometryService extends ChangeNotifier {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    _namingTemplate =
-        prefs.getString('naming_template') ?? '{project}_{camera}_{index}';
+    final stored = prefs.getString('naming_template');
+    // The old default numbered files per import, which repeats across
+    // imports; move it to the date + original-name default.
+    _namingTemplate = stored == null || stored == '{project}_{camera}_{index}'
+        ? defaultNamingTemplate
+        : stored;
     final json = prefs.getString('rig_cameras');
     if (json != null) {
       try {

@@ -1,3 +1,5 @@
+import 'file_hash.dart';
+import 'file_naming.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -10,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/camera_device.dart';
 import '../models/import_report.dart';
-import 'package:crypto/crypto.dart';
 import 'gopro_protocol.dart';
 import 'capture_coordinator.dart';
 import 'system_settings_service.dart';
@@ -123,6 +124,86 @@ class GoProSettings {
     'Auto boost': 4,
   };
   static const Map<String, int> bitDepth = {'8 bit': 0, '10 bit': 2};
+
+  // Protune exposure. Not in the published Open GoPro tables; IDs and values
+  // as found by the community on HERO10-13 (OpenGoPro issues #561, #903).
+  // Every write is still checked against the camera's capability list and
+  // read back, so a camera that does not know an ID is never guessed at.
+  static const Map<String, int> iso = {
+    '100': 8,
+    '200': 7,
+    '400': 2,
+    '800': 4,
+    '1600': 1,
+    '3200': 3,
+    '6400': 0,
+  };
+  static const Map<String, int> shutter = {
+    'Auto': 0,
+    '1/24': 3,
+    '1/25': 4,
+    '1/30': 5,
+    '1/48': 6,
+    '1/50': 7,
+    '1/60': 8,
+    '1/96': 11,
+    '1/100': 12,
+    '1/120': 13,
+    '1/192': 16,
+    '1/200': 17,
+    '1/240': 18,
+    '1/384': 25,
+    '1/400': 21,
+    '1/480': 22,
+    '1/800': 28,
+    '1/960': 23,
+    '1/1600': 29,
+    '1/1920': 24,
+    '1/3200': 30,
+    '1/3840': 31,
+  };
+  static const Map<String, int> whiteBalance = {
+    'Auto': 0,
+    '2300K': 8,
+    '2800K': 9,
+    '3200K': 10,
+    '4000K': 5,
+    '4500K': 11,
+    '5000K': 12,
+    '5500K': 2,
+    '6000K': 7,
+    '6500K': 3,
+    'Native': 4,
+  };
+  static const Map<String, int> color = {
+    'Flat': 1,
+    'Natural': 2,
+    'Vibrant': 100,
+  };
+  static const Map<String, int> sharpness = {'High': 0, 'Medium': 1, 'Low': 2};
+  static const Map<String, int> ev = {
+    '+2': 0,
+    '+1.5': 1,
+    '+1': 2,
+    '+0.5': 3,
+    '0': 4,
+    '-0.5': 5,
+    '-1': 6,
+    '-1.5': 7,
+    '-2': 8,
+  };
+
+  /// (setting id, settings key, value map) in write order. ISO max before
+  /// min so a raised minimum never exceeds the old maximum.
+  static const exposure = [
+    (13, 'Target ISO', iso),
+    (102, 'Target ISO Min', iso),
+    (145, 'Target Shutter', shutter),
+    (115, 'Target White Balance', whiteBalance),
+    (118, 'Target EV', ev),
+    (116, 'Target Color', color),
+    (117, 'Target Sharpness', sharpness),
+  ];
 
   // Setting ID 122: Digital Lens (Photo)
   static const int photoLensId = 122;
@@ -907,6 +988,13 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       121: 'Video lens',
       135: 'Hypersmooth',
       183: 'Bit depth',
+      13: 'ISO max',
+      102: 'ISO min',
+      145: 'Shutter',
+      115: 'White balance',
+      116: 'Color',
+      117: 'Sharpness',
+      118: 'EV',
       122: 'Photo lens',
       125: 'Photo output',
       171: 'Photo interval',
@@ -1122,6 +1210,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
   Future<ImportReport> importAllConnectedCameras(
     String destination, {
     bool saveToGallery = false,
+    String? projectName,
     void Function(String)? onStatus,
     bool Function(GoProMediaItem item)? include,
   }) async {
@@ -1166,6 +1255,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
             items,
             targetCapturesDirectory: destination,
             saveToNativeGallery: saveToGallery,
+            projectName: projectName,
             onProgress: (n, total, fraction, message) {
               _syncProgress =
                   (i + (total == 0 ? 1 : (n - 1 + fraction) / total)) /
@@ -1358,6 +1448,15 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     _previewTransition = true;
     _previewCameraId = id; // Retain ownership if the HTTP outcome is uncertain.
     try {
+      // A stream still running from an earlier view never repeats its
+      // program tables (PAT/PMT), so a new receiver could not decode it:
+      // always stop first, then start fresh.
+      try {
+        await http
+            .get(Uri.parse('http://$ip:8080/gopro/camera/stream/stop'))
+            .timeout(const Duration(seconds: 4));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      } catch (_) {}
       final response = await http
           .get(Uri.parse('http://$ip:8080/gopro/camera/stream/start?port=8554'))
           .timeout(const Duration(seconds: 6));
@@ -1481,17 +1580,6 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     try {
       // Resume an interrupted download (multi-GB video chapters) with Range.
       resumeFrom = await partial.exists() ? await partial.length() : 0;
-      // Checksum while downloading, so a 10 GB video is never read twice.
-      var digestSink = _DigestSink();
-      var hasher = sha256.startChunkedConversion(digestSink);
-      if (resumeFrom > 0) {
-        // Hash the part on disk before asking the camera: reading GBs takes
-        // minutes and the camera closes a response nobody reads from.
-        onStatus?.call('Checking the part already downloaded');
-        await for (final chunk in partial.openRead()) {
-          hasher.add(chunk);
-        }
-      }
       final request = http.Request(
         'GET',
         Uri.parse('http://$ip:8080/videos/DCIM/$directory/$filename'),
@@ -1506,11 +1594,6 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         throw HttpException('HTTP ${response.statusCode}');
       }
       await partial.parent.create(recursive: true);
-      if (resumeFrom > 0 && !resumed) {
-        // Camera ignored Range and sent the whole file: start over.
-        digestSink = _DigestSink();
-        hasher = sha256.startChunkedConversion(digestSink);
-      }
       sink = partial.openWrite(
         mode: resumed ? FileMode.append : FileMode.write,
       );
@@ -1518,15 +1601,21 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       final length = response.contentLength == null
           ? (expectedBytes ?? 0)
           : response.contentLength! + (resumed ? resumeFrom : 0);
+      // Progress at most 4x per second: a redraw per network chunk starves
+      // the UI thread on multi-GB videos (Android then closes the app).
+      final tick = Stopwatch()..start();
       await for (final chunk in response.stream.timeout(
         const Duration(seconds: 30),
       )) {
         if (_cancelImport) throw StateError('Import cancelled');
         sink.add(chunk);
-        hasher.add(chunk);
         received += chunk.length;
-        if (length > 0) onProgress?.call((received / length).clamp(0, 1));
+        if (length > 0 && tick.elapsedMilliseconds >= 250) {
+          tick.reset();
+          onProgress?.call((received / length).clamp(0, 1));
+        }
       }
+      if (length > 0) onProgress?.call((received / length).clamp(0, 1));
       await sink.flush();
       await sink.close();
       sink = null;
@@ -1539,9 +1628,13 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         keepPartial = false;
         throw const FormatException('Incomplete media download');
       }
-      hasher.close();
+      // SHA-256 in a background isolate; hashing GBs on the UI thread froze
+      // the app.
+      onStatus?.call('Verifying $filename');
+      final path = partial.path;
+      final digest = await sha256OfFile(path);
       await partial.rename(targetFilePath);
-      _downloadDigests[targetFilePath] = digestSink.value.toString();
+      _downloadDigests[targetFilePath] = digest;
       return true;
     } catch (e) {
       debugPrint(
@@ -1695,9 +1788,31 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     List<GoProMediaItem> items, {
     required String targetCapturesDirectory,
     bool saveToNativeGallery = true,
+    String? projectName,
     Function(int current, int total, double fileProgress, String status)?
     onProgress,
   }) async {
+    // Name of the gallery copy, from the template in Settings.
+    String? stored;
+    try {
+      stored = (await SharedPreferences.getInstance()).getString(
+        'naming_template',
+      );
+    } catch (_) {}
+    final template = stored == null || stored == '{project}_{camera}_{index}'
+        ? defaultNamingTemplate
+        : stored;
+    String nameFor(GoProMediaItem item, int i) => applyNamingTemplate(
+      template,
+      NamingValues(
+        project: projectName ?? 'KOSMOS3D',
+        camera: item.cameraId.isEmpty ? item.cameraName : nameOf(item.cameraId),
+        serial: _serials[item.cameraId] ?? item.cameraName,
+        original: item.filename,
+        recorded: item.modifiedTime ?? DateTime.now(),
+        index: i + 1,
+      ),
+    );
     if (capture.active || capture.busy) {
       throw StateError('Stop capture before importing files.');
     }
@@ -1749,9 +1864,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
               info['bytes'] == length &&
               info['sourceModified'] == item.modifiedTime?.toIso8601String() &&
               (length > 256 * 1024 * 1024 ||
-                  info['sha256'] ==
-                      (await sha256.bind(existing.openRead()).first)
-                          .toString());
+                  info['sha256'] == await sha256OfFile(existing.path));
         } catch (_) {}
       }
       if (verified &&
@@ -1759,7 +1872,12 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
           (item.sizeBytes <= 0 || await existing.length() == item.sizeBytes)) {
         successCount++;
         if (saveToNativeGallery) {
-          await _exportGallery(receipt, savePath, item.filename);
+          await _exportGallery(
+            receipt,
+            savePath,
+            item.filename,
+            nameFor(item, i),
+          );
         }
         onProgress?.call(
           i + 1,
@@ -1792,7 +1910,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       if (ok) {
         final digest =
             _downloadDigests.remove(savePath) ??
-            (await sha256.bind(existing.openRead()).first).toString();
+            await sha256OfFile(existing.path);
         final tempReceipt = File('${receipt.path}.part');
         await tempReceipt.writeAsString(
           jsonEncode({
@@ -1810,7 +1928,12 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         successCount++;
         // Copy to native phone gallery if enabled
         if (saveToNativeGallery) {
-          await _exportGallery(receipt, savePath, item.filename);
+          await _exportGallery(
+            receipt,
+            savePath,
+            item.filename,
+            nameFor(item, i),
+          );
         }
       }
     }
@@ -1822,11 +1945,16 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     File receipt,
     String path,
     String filename,
+    String displayName,
   ) async {
     final info =
         jsonDecode(await receipt.readAsString()) as Map<String, dynamic>;
     if (info['galleryExported'] == true) return;
-    final saved = await SystemSettingsService.saveToDeviceGallery(path);
+    final saved = await SystemSettingsService.saveToDeviceGallery(
+      path,
+      displayName: displayName,
+    );
+    info['galleryName'] = displayName;
     if (saved == null) galleryFailures.add(filename);
     info['galleryExported'] = saved != null;
     final temp = File('${receipt.path}.part');
@@ -1939,6 +2067,7 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
         }
       }
     }
+    await _applyExposure(id, settings);
     final lens = settings['Lens'];
     if (lens != null) {
       final key = photo ? 122 : 121;
@@ -1959,6 +2088,49 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
       await _writeSetting(id, key, value);
     }
   }
+
+  /// Exposure targets over BLE (undocumented Protune IDs). A setting the
+  /// camera does not offer in this mode (e.g. shutter in photo mode) is
+  /// skipped and listed in [exposureSkipped]; an offered setting that rejects
+  /// the value fails with the values it does accept.
+  Future<void> _applyExposure(String id, Map<String, String> settings) async {
+    final wanted = [
+      for (final e in GoProSettings.exposure)
+        if (e.$3[settings[e.$2]] != null) e,
+    ];
+    final skipped = <String>[];
+    if (wanted.isEmpty) {
+      exposureSkipped[id] = skipped;
+      return;
+    }
+    for (final (key, name, map) in wanted) {
+      final value = map[settings[name]]!;
+      // One query per ID: a camera may reject a query naming an unknown ID.
+      var offered = const <int>[];
+      try {
+        offered = (await _capabilityMap(id, [key]))[key] ?? const <int>[];
+      } on GoProRejected {
+        offered = const <int>[];
+      }
+      if (offered.isEmpty) {
+        skipped.add(name.replaceFirst('Target ', ''));
+        continue;
+      }
+      if (!offered.contains(value)) {
+        final names = {for (final e in map.entries) e.value: e.key};
+        throw UnsupportedError(
+          '${nameOf(id)}: ${name.replaceFirst('Target ', '')} '
+          '${settings[name]} is not available here. Camera offers: '
+          '${offered.map((v) => names[v] ?? '$v').join(', ')}',
+        );
+      }
+      await _writeSetting(id, key, value);
+    }
+    exposureSkipped[id] = skipped;
+  }
+
+  /// Exposure settings the camera did not offer during the last apply.
+  final Map<String, List<String>> exposureSkipped = {};
 
   /// Setting 171 value when the interval runs on the camera timer, else null.
   static int? _cameraTimerValue(Map<String, String> settings) {
@@ -2201,9 +2373,59 @@ class GoProService extends ChangeNotifier implements CameraServiceInterface {
     throw StateError('Camera Wi-Fi did not switch ${enabled ? 'on' : 'off'}');
   }
 
+  /// Wi-Fi access point on/off with the cached status updated.
+  Future<void> toggleWifiAp(String id, bool enabled) async {
+    await setWifiAp(id, enabled);
+    (_cameraStatus[id] ??= {})[69] = enabled ? 1 : 0;
+    notifyListeners();
+  }
+
   /// GPS (setting 83) on/off, read back.
-  Future<void> setGps(String id, bool enabled) =>
-      _writeSetting(id, 83, enabled ? 1 : 0);
+  Future<void> setGps(String id, bool enabled) async {
+    await _writeSetting(id, 83, enabled ? 1 : 0);
+    (_panelSettings[id] ??= {})[83] = enabled ? 1 : 0;
+    notifyListeners();
+  }
+
+  final Map<String, Map<int, int>> _panelSettings = {};
+
+  /// Exposure as the camera reports it, e.g. "ISO 200 · 1/480 · 5500K".
+  String exposureOf(String id) {
+    final v = _panelSettings[id] ?? const {};
+    String? name(int key, Map<String, int> map) {
+      final value = v[key];
+      if (value == null) return null;
+      for (final e in map.entries) {
+        if (e.value == value) return e.key;
+      }
+      return null;
+    }
+
+    final max = name(13, GoProSettings.iso), min = name(102, GoProSettings.iso);
+    final parts = [
+      if (max != null) min == null || min == max ? 'ISO $max' : 'ISO $min-$max',
+      ?name(145, GoProSettings.shutter),
+      ?name(115, GoProSettings.whiteBalance),
+      if (name(118, GoProSettings.ev) case final ev?) 'EV $ev',
+      ?name(116, GoProSettings.color),
+    ];
+    return parts.join(' · ');
+  }
+
+  /// Settings shown on the camera panel (GPS 83), last read.
+  Map<int, int> panelSettingsOf(String id) => _panelSettings[id] ?? const {};
+
+  /// Status plus panel settings, for the camera panel's on/off highlights.
+  Future<void> refreshPanel(String id) async {
+    await refreshStatus(id);
+    try {
+      _panelSettings[id] = await readSettingValues(id, [
+        83,
+        for (final e in GoProSettings.exposure) e.$1,
+      ]);
+    } catch (_) {}
+    notifyListeners();
+  }
 
   // ─── KEEP AWAKE ────────────────────────────────────────────
 
@@ -2540,13 +2762,4 @@ class NotImportedException implements Exception {
   final int count;
   @override
   String toString() => '$camera: $count files not imported';
-}
-
-/// Receives the single digest from a chunked SHA-256 conversion.
-class _DigestSink implements Sink<Digest> {
-  late Digest value;
-  @override
-  void add(Digest data) => value = data;
-  @override
-  void close() {}
 }

@@ -78,12 +78,15 @@ class SystemSettingsService {
   static Future<String?> saveToDeviceGallery(
     String sourcePath, {
     String albumName = 'KOSMOS3D',
+    String? displayName,
   }) async {
     try {
-      final destPath = await _channel.invokeMethod<String>(
-        'saveToDeviceGallery',
-        {'sourcePath': sourcePath, 'albumName': albumName},
-      );
+      final destPath = await _channel
+          .invokeMethod<String>('saveToDeviceGallery', {
+            'sourcePath': sourcePath,
+            'albumName': albumName,
+            'displayName': ?displayName,
+          });
       return destPath;
     } catch (e) {
       debugPrint('Error saving to device gallery: $e');

@@ -5,7 +5,17 @@ import '../l10n/app_text.dart';
 
 /// Photo/video extensions shown as media; receipts, logs and partial
 /// downloads stay out of the grid.
-const mediaExtensions = {'jpg', 'jpeg', 'gpr', 'dng', 'png', 'mp4', 'mov', 'lrv', '360'};
+const mediaExtensions = {
+  'jpg',
+  'jpeg',
+  'gpr',
+  'dng',
+  'png',
+  'mp4',
+  'mov',
+  'lrv',
+  '360',
+};
 
 bool isMediaFile(String path) {
   final name = path.split(RegExp(r'[\\/]')).last.toLowerCase();
@@ -20,7 +30,11 @@ bool isVideoFile(String path) {
 
 /// Every imported photo and video in a folder, newest import first.
 class MediaLibraryScreen extends StatefulWidget {
-  const MediaLibraryScreen({super.key, required this.folder, required this.title});
+  const MediaLibraryScreen({
+    super.key,
+    required this.folder,
+    required this.title,
+  });
   final Directory folder;
   final String title;
 
@@ -43,7 +57,10 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
     final media = <File>[];
     var partial = 0;
     if (await widget.folder.exists()) {
-      await for (final e in widget.folder.list(recursive: true, followLinks: false)) {
+      await for (final e in widget.folder.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (e is! File) continue;
         if (e.path.endsWith('.part')) partial++;
         if (isMediaFile(e.path)) media.add(e);
@@ -64,7 +81,9 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.65);
+    final muted = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.65);
     return Scaffold(
       appBar: AppBar(
         title: AppText(widget.title),
@@ -74,7 +93,9 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
             icon: const Icon(Icons.ios_share),
             onPressed: _media.isEmpty
                 ? null
-                : () => Share.shareXFiles([for (final f in _media) XFile(f.path)]),
+                : () => Share.shareXFiles([
+                    for (final f in _media) XFile(f.path),
+                  ]),
           ),
         ],
       ),
@@ -91,7 +112,10 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           AppText(
-                            '{n} photos and videos'.replaceAll('{n}', '${_media.length}'),
+                            '{n} photos and videos'.replaceAll(
+                              '{n}',
+                              '${_media.length}',
+                            ),
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 4),
@@ -106,7 +130,10 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                             AppText(
                               'Interrupted downloads: {n}. They continue on the next import.'
                                   .replaceAll('{n}', '$_partial'),
-                              style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ],
@@ -117,18 +144,22 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
-                        child: AppText('No imported files yet', style: TextStyle(color: muted)),
+                        child: AppText(
+                          'No imported files yet',
+                          style: TextStyle(color: muted),
+                        ),
                       ),
                     )
                   else
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       sliver: SliverGrid.builder(
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 3,
+                              mainAxisSpacing: 6,
+                              crossAxisSpacing: 6,
+                            ),
                         itemCount: _media.length,
                         itemBuilder: (context, i) => _tile(_media[i]),
                       ),
@@ -142,11 +173,15 @@ class _MediaLibraryScreenState extends State<MediaLibraryScreen> {
 
   Widget _tile(File file) {
     final video = isVideoFile(file.path);
-    final raw = file.path.toLowerCase().endsWith('.gpr') || file.path.toLowerCase().endsWith('.dng');
+    final raw =
+        file.path.toLowerCase().endsWith('.gpr') ||
+        file.path.toLowerCase().endsWith('.dng');
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => _MediaViewer(file: file, name: _name(file))),
+        MaterialPageRoute(
+          builder: (_) => _MediaViewer(file: file, name: _name(file)),
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),

@@ -574,80 +574,10 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
               ),
             ),
 
-            // ─── Connected Camera Details ───
+            // ─── Everything for this camera, grouped, with live status ───
             if (cam.isConnected) ...[
-              const SizedBox(height: 12),
-              // Current settings chips
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: cam.currentSettings.entries.map((e) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: AppText(
-                      '${e.key}: ${e.value}',
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-              // Most-used actions; everything else is on the camera sheet.
-              Row(
-                children: [
-                  _buildActionButton(
-                    icon: goPro.isLocating(cam.id)
-                        ? Icons.notifications_off
-                        : Icons.notifications_active,
-                    label: goPro.isLocating(cam.id) ? 'Stop' : 'Locate',
-                    color: goPro.isLocating(cam.id) ? Colors.orange : null,
-                    onTap: () => _guard(
-                      () => goPro.setLocate(cam.id, !goPro.isLocating(cam.id)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.live_tv,
-                    label: 'Live view',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => LiveViewScreen(cameraId: cam.id),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.key,
-                    label: 'Wi-Fi',
-                    color: Colors.lightBlueAccent,
-                    onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => const HotspotDialog(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildActionButton(
-                    icon: Icons.more_horiz,
-                    label: 'More',
-                    color: primaryColor,
-                    onTap: () => showCameraSheet(context, cam.id),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 10),
+              CameraPanel(id: cam.id),
             ],
           ],
         ),
@@ -692,47 +622,6 @@ class _DeviceManagerScreenState extends State<DeviceManagerScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    VoidCallback? onTap,
-    Color? color,
-  }) {
-    final base = Theme.of(context).colorScheme.onSurface;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: (color ?? base).withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: (color ?? base).withValues(alpha: 0.15)),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: color ?? base.withValues(alpha: 0.75),
-              ),
-              const SizedBox(height: 2),
-              AppText(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: color ?? base.withValues(alpha: 0.65),
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

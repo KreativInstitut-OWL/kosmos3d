@@ -62,18 +62,18 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Test scan');
       await tester.pumpAndSettle();
+      for (var i = 0; i < 2; i++) {
+        tester.widget<Stepper>(find.byType(Stepper)).onStepContinue!();
+        await tester.pumpAndSettle();
+      }
       final start = find.text('Start Capture');
-      await tester.scrollUntilVisible(
-        start,
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
+      await tester.ensureVisible(start);
       await tester.pumpAndSettle();
       await tester.tap(start);
       await tester.pump();
       // The button is replaced by progress, so a second tap cannot land.
       expect(find.text('Start Capture'), findsNothing);
-      await tester.tap(find.byType(ListView).first, warnIfMissed: false);
+      tester.widget<Stepper>(find.byType(Stepper)).onStepContinue!();
       await tester.pump();
       expect(rig.prepares, 1);
       expect(projects.creates, 0);

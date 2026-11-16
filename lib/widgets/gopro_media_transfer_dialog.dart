@@ -1,4 +1,7 @@
 import 'dart:io';
+import '../services/rig_geometry_service.dart';
+import '../services/file_naming.dart';
+import '../services/project_service.dart';
 import '../l10n/app_text.dart';
 import 'package:flutter/material.dart';
 import '../services/rig_sets.dart';
@@ -49,6 +52,32 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
   }
 
   bool _loading = false, _transferring = false, _gallery = true;
+
+  /// Project whose name goes into the file names ({project}).
+  String? _projectName;
+
+  String? _projectFromPath() {
+    final path = widget.projectCapturesPath;
+    if (path == null) return null;
+    final m = RegExp(r'kosmos3d_projects/([^/]+)').firstMatch(path);
+    if (m == null) return null;
+    return context
+        .read<ProjectService>()
+        .projects
+        .where((p) => p.id == m.group(1))
+        .firstOrNull
+        ?.name;
+  }
+
+  String get _namingProject {
+    if (_projectName != null) return _projectName!;
+    final fromPath = _projectFromPath();
+    if (fromPath != null) return fromPath;
+    final projects = [...context.read<ProjectService>().projects]
+      ..sort((a, b) => b.lastModifiedAt.compareTo(a.lastModifiedAt));
+    return projects.isEmpty ? 'KOSMOS3D' : projects.first.name;
+  }
+
   double _progress = 0;
   String _status =
       'Join a camera’s Wi-Fi, then browse its files. Bluetooth controls the rig; Wi-Fi transfers originals.';
@@ -150,6 +179,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
       final report = await service.importAllConnectedCameras(
         target,
         saveToGallery: _gallery,
+        projectName: _namingProject,
         include: windows.isEmpty
             ? null
             : (item) => inRunWindows(item.modifiedTime, windows),
@@ -232,6 +262,7 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
         items,
         targetCapturesDirectory: target,
         saveToNativeGallery: _gallery,
+        projectName: _namingProject,
         onProgress: (current, total, fraction, status) {
           if (mounted) {
             setState(() {
@@ -402,6 +433,45 @@ class _GoProMediaTransferDialogState extends State<GoProMediaTransferDialog> {
                   value: _gallery,
                   onChanged: busy ? null : (v) => setState(() => _gallery = v!),
                 ),
+                if (_gallery && _projectFromPath() == null)
+                  Builder(
+                    builder: (context) {
+                      final names = {
+                        for (final p
+                            in context.watch<ProjectService>().projects)
+                          p.name,
+                        'KOSMOS3D',
+                      }.toList();
+                      return DropdownButtonFormField<String>(
+                        initialValue: names.contains(_namingProject)
+                            ? _namingProject
+                            : names.first,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Project name in file names',
+                          isDense: true,
+                        ),
+                        items: [
+                          for (final n in names)
+                            DropdownMenuItem(value: n, child: AppText(n)),
+                        ],
+                        onChanged: busy
+                            ? null
+                            : (v) => setState(() => _projectName = v),
+                      );
+                    },
+                  ),
+                if (_gallery)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: AppText(
+                      'Gallery files are named by the template in Settings > File naming, e.g. ${applyNamingTemplate(context.watch<RigGeometryService>().namingTemplate, NamingValues(project: _namingProject, camera: 'Cam', serial: '2114', original: 'GX012800.MP4', recorded: DateTime.now(), index: 1))}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                  ),
                 if (_items.isNotEmpty)
                   Row(
                     children: [

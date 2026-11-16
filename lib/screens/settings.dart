@@ -1,4 +1,6 @@
 import '../l10n/app_text.dart';
+import '../services/file_naming.dart';
+import '../widgets/naming_editor.dart';
 import 'package:flutter/material.dart';
 import '../services/capture_options.dart';
 import '../theme/app_theme.dart';
@@ -366,11 +368,14 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     leading: const Icon(Icons.text_fields, size: 22),
                     title: const AppText(
-                      'Naming Template',
+                      'File naming',
                       style: TextStyle(fontSize: 14),
                     ),
                     subtitle: AppText(
-                      rig.namingTemplate,
+                      applyNamingTemplate(
+                        rig.namingTemplate,
+                        NamingValues.example(),
+                      ),
                       style: const TextStyle(
                         fontSize: 12,
                         fontFamily: 'monospace',
@@ -929,56 +934,16 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  void _showNamingDialog(BuildContext context, RigGeometryService rig) {
-    final ctrl = TextEditingController(text: rig.namingTemplate);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const AppText('File Naming Template'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: ctrl,
-              decoration: const InputDecoration(labelText: 'Template'),
-            ),
-            const SizedBox(height: 12),
-            AppText(
-              'Available variables:',
-              style: TextStyle(
-                color: Theme.of(ctx).primaryColor,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const AppText(
-              '{project} — Project name\n{camera} — Camera label\n{index} — Capture number (0001)\n{date} — Date (2026-04-30)\n{time} — Time (143025)',
-              style: TextStyle(fontSize: 11, height: 1.6),
-            ),
-            const SizedBox(height: 8),
-            AppText(
-              'Preview: ${rig.generateFileName(projectName: "MyScan", cameraLabel: "CAM1", index: 1)}',
-              style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const AppText('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              rig.setNamingTemplate(ctrl.text.trim());
-              Navigator.pop(ctx);
-            },
-            child: const AppText('Save'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _showNamingDialog(
+    BuildContext context,
+    RigGeometryService rig,
+  ) async {
+    final template = await showNamingEditor(context, rig.namingTemplate);
+    if (template != null) {
+      rig.setNamingTemplate(
+        template.isEmpty ? defaultNamingTemplate : template,
+      );
+    }
   }
 }
 

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kosmos3d/providers/settings_provider.dart';
 import 'package:kosmos3d/services/capture_options.dart';
+import 'package:kosmos3d/services/file_naming.dart';
 import 'package:kosmos3d/services/gopro_service.dart';
 
 void main() {
@@ -10,10 +11,10 @@ void main() {
     final kio = SettingsProvider.builtInPresets.first;
     expect(kio.name, 'KIO');
     expect(kio.settings['Resolution'], '5.3K');
-    // ISO fixed 200, 1/500 s at 30 fps = 21.6 deg -> 22, 5500K, flat.
+    // ISO fixed 200, 1/480 s at 30 fps = 22.5 deg -> 23, 5500K, flat.
     expect(
       labsRecipe(kio.settings, now: now),
-      'mVi2M2i2S22w55cFoT261116123005.250',
+      'mVi2M2i2S23w55cFoT261116123005.250',
     );
   });
 
@@ -68,5 +69,44 @@ void main() {
     }, now: now)!;
     expect(r, startsWith('mVi64S0wAx-.5sL'));
     expect(labsRecipe({'Mode': 'photo'}, now: now), isNull);
+  });
+
+  test('every exposure option has a BLE value', () {
+    for (final (_, key, map) in GoProSettings.exposure) {
+      final options = {
+        'Target ISO Min': CaptureOptions.iso,
+        'Target ISO': CaptureOptions.iso,
+        'Target Shutter': CaptureOptions.shutter,
+        'Target White Balance': CaptureOptions.whiteBalance,
+        'Target EV': CaptureOptions.ev,
+        'Target Color': CaptureOptions.color,
+        'Target Sharpness': CaptureOptions.sharpness,
+      }[key]!;
+      for (final o in options.where((o) => o != keepCamera)) {
+        expect(map, contains(o), reason: '$key $o');
+      }
+    }
+  });
+
+  test('naming template builds names from capture data', () {
+    final v = NamingValues(
+      project: 'FB1 02',
+      camera: 'Front Left',
+      serial: 'C3531325642114',
+      original: 'GX022800.MP4',
+      recorded: DateTime(2026, 11, 16, 15, 42, 10),
+      index: 7,
+    );
+    expect(
+      applyNamingTemplate(defaultNamingTemplate, v),
+      'FB1-02_Front-Left_2026-11-16_GX022800.MP4',
+    );
+    expect(
+      applyNamingTemplate('{project}_{serial}_{clip}-{chapter}_{time}', v),
+      'FB1-02_2114_2800-02_154210.MP4',
+    );
+    // No unique part: original name is appended.
+    expect(applyNamingTemplate('{project}', v), 'FB1-02_GX022800.MP4');
+    expect(applyNamingTemplate('{project}_{index}', v), 'FB1-02_0007.MP4');
   });
 }

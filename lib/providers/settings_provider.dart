@@ -105,11 +105,11 @@ class SettingsProvider extends ChangeNotifier {
         'Orientation': 'Portrait',
         'Target ISO Min': '200',
         'Target ISO': '200',
-        'Target Shutter': '1/500',
+        'Target Shutter': '1/480',
         'Target White Balance': '5500K',
         'Target Color': 'Flat',
         'Guidance':
-            'KIO standard: 5.3K / 30 fps video, Linear, fixed ISO 200 and 1/500 s, stabilization off. Show the exposure QR to every camera (GoPro Labs) or set ISO and shutter on each camera. Needs good light.',
+            'KIO standard: 5.3K / 30 fps video, Linear, fixed ISO 200, shutter 1/480 s (the GoPro step closest to 1/500 at 30 fps), 5500K, flat color, stabilization off. Needs good light.',
       },
     ),
     CameraPreset(

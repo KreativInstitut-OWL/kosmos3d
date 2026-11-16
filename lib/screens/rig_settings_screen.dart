@@ -133,13 +133,13 @@ class _RigSettingsScreenState extends State<RigSettingsScreen> {
               OutlinedButton.icon(
                 onPressed: () => showExposureLabsQr(context),
                 icon: const Icon(Icons.qr_code, size: 16),
-                label: const AppText('ISO / shutter / white balance (Labs QR)'),
+                label: const AppText('Exposure via Labs QR (older cameras)'),
               ),
             ],
           ),
           const SizedBox(height: 8),
           AppText(
-            'ISO, shutter and white balance are not part of the official Bluetooth API. On cameras with GoPro Labs firmware, show them the Labs QR; otherwise set them once on each camera.',
+            'ISO, shutter, white balance, EV, color and sharpness are set per project (Camera settings step) over Bluetooth on HERO10 and newer. The Labs QR is a fallback for older cameras.',
             style: TextStyle(color: muted, fontSize: 11),
           ),
           const SizedBox(height: 16),

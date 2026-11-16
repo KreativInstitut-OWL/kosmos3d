@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'file_hash.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -388,7 +389,7 @@ class CloudStorageService extends ChangeNotifier {
     if (length > maxSinglePutBytes) {
       throw StateError('${file.path} is larger than 5 GB; split it first.');
     }
-    final hash = (await sha256.bind(file.openRead()).first).toString();
+    final hash = await sha256OfFile(file.path);
     final signed = S3Signer(config).sign(
       method: 'PUT',
       key: key,

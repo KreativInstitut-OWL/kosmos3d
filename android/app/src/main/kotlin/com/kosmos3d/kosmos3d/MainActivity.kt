@@ -147,12 +147,19 @@ class MainActivity : FlutterActivity() {
                                     "gpr" -> "image/x-adobe-dng"
                                     else -> throw IllegalArgumentException("Unsupported gallery media type")
                                 }
+                                // Name from the app's naming template; keep the
+                                // source extension so the media type matches.
+                                val requested = call.argument<String>("displayName")
+                                val fileName = if (requested != null &&
+                                    requested.matches(Regex("[A-Za-z0-9_.-]{1,200}")) &&
+                                    requested.substringAfterLast('.', "").equals(srcFile.extension, true))
+                                    requested else srcFile.name
                                 val saved: String
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                     val collection = if (mime.startsWith("video/")) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                                         else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                                     val values = ContentValues().apply {
-                                        put(MediaStore.MediaColumns.DISPLAY_NAME, srcFile.name)
+                                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                                         put(MediaStore.MediaColumns.MIME_TYPE, mime)
                                         put(MediaStore.MediaColumns.RELATIVE_PATH, "DCIM/$albumName")
                                         put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -171,7 +178,7 @@ class MainActivity : FlutterActivity() {
                                 } else {
                                     val dcimDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), albumName)
                                     if (!dcimDir.exists() && !dcimDir.mkdirs()) throw IllegalStateException("Could not create album")
-                                    val destination = File(dcimDir, srcFile.name)
+                                    val destination = File(dcimDir, fileName)
                                     srcFile.inputStream().use { input -> destination.outputStream().use { output -> input.copyTo(output) } }
                                     MediaScannerConnection.scanFile(this, arrayOf(destination.absolutePath), arrayOf(mime), null)
                                     saved = destination.absolutePath

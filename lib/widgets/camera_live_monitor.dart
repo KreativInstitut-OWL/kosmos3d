@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../services/capture_coordinator.dart';
 import '../services/gopro_service.dart';
 
 /// One real MPEG-TS/UDP preview at a time. LIVE requires a decoded first frame.
@@ -96,7 +97,19 @@ class _CameraLiveMonitorState extends State<CameraLiveMonitor>
     });
     try {
       if (_service!.previewCameraId != null) await _service!.stopAllPreviews();
-      await _service!.discoverGoProIps();
+      final id = _selected!;
+      final joined = _service!.devices.any(
+        (c) => c.id == id && c.isWifiConnected && c.wifiIpAddress != null,
+      );
+      if (!joined) {
+        // The preview only runs over the camera's own Wi-Fi: join it first
+        // (the same automatic join the import uses).
+        setState(
+          () => _status =
+              'Joining ${_service!.nameOf(id)} Wi-Fi… approve the prompt if asked',
+        );
+        await _service!.joinCameraWifi(id);
+      }
       if (!mounted) return;
       _playingId = _selected;
       setState(() {
@@ -107,7 +120,7 @@ class _CameraLiveMonitorState extends State<CameraLiveMonitor>
       if (mounted) {
         setState(() {
           _busy = false;
-          _status = '$e';
+          _status = describeError(e);
         });
       }
     }
@@ -224,9 +237,16 @@ class _CameraLiveMonitorState extends State<CameraLiveMonitor>
                     ),
                   )
                   .toList(),
-              onChanged: _busy || _showPlayer
+              onChanged: _busy
                   ? null
-                  : (v) => setState(() => _selected = v),
+                  : (v) async {
+                      if (v == null || v == _selected) return;
+                      // Switch camera: stop this stream, join the other.
+                      if (_showPlayer) await _stop();
+                      if (!mounted) return;
+                      setState(() => _selected = v);
+                      await _start();
+                    },
             ),
           AspectRatio(
             aspectRatio: 16 / 9,

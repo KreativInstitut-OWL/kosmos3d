@@ -13,7 +13,7 @@ library;
 const keepCamera = 'Camera preset';
 
 /// Set by the build: --dart-define=APP_VERSION=... --dart-define=APP_BUILD=...
-const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '2.2.0');
+const appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '2.3.0');
 const appBuild = String.fromEnvironment('APP_BUILD', defaultValue: 'dev');
 
 class CaptureOptions {
@@ -40,14 +40,13 @@ class CaptureOptions {
   static const iso = [
     keepCamera, '100', '200', '400', '800', '1600', '3200', '6400', //
   ];
-  static const shutterDenominators = [
-    24, 25, 30, 48, 50, 60, 96, 100, 120, 180, 192, 200, 240, 250, 360, //
-    384, 400, 480, 500, 960, 1000, 1920, 2000, 3840, 4000, 8000,
-  ];
-  static final shutter = [
-    keepCamera,
-    'Auto',
-    for (final d in shutterDenominators) '1/$d',
+
+  /// GoPro's own shutter steps (video). Which ones a camera offers depends on
+  /// the frame rate: at 30 fps 1/30, 1/60, 1/120, 1/240, 1/480, 1/960 ...
+  static const shutter = [
+    keepCamera, 'Auto', '1/24', '1/25', '1/30', '1/48', '1/50', '1/60', //
+    '1/96', '1/100', '1/120', '1/192', '1/200', '1/240', '1/384', '1/400',
+    '1/480', '1/800', '1/960', '1/1600', '1/1920', '1/3200', '1/3840',
   ];
   static const whiteBalance = [
     keepCamera, 'Auto', '2300K', '2800K', '3200K', '4000K', '4500K', //

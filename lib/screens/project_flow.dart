@@ -95,12 +95,28 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
     super.dispose();
   }
 
+  int _step = 0;
+
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
     final goPro = context.watch<GoProService>();
     final cams = goPro.devices.where((d) => d.isConnected).length;
-    final primary = Theme.of(context).primaryColor;
+    const lastStep = 2;
+
+    void next() {
+      if (_step == 0 && _nameController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: AppText('Please enter a project name.')),
+        );
+        return;
+      }
+      if (_step < lastStep) {
+        setState(() => _step++);
+      } else {
+        _start(context);
+      }
+    }
 
     return PopScope(
       canPop: !_isStarting,
@@ -114,187 +130,277 @@ class _ProjectFlowScreenState extends State<ProjectFlowScreen> {
         ),
         body: AbsorbPointer(
           absorbing: _isStarting,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: settings.translate('enter_project_name'),
-                  border: const OutlineInputBorder(),
-                  hintText: 'e.g. Living Room Scan',
-                ),
-              ),
-              _header('Cameras'),
-              const CameraBar(),
-              _header('Preset'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (final preset in settings.allPresets)
-                    ChoiceChip(
-                      avatar: AppText(preset.icon),
-                      label: AppText(preset.name),
-                      selected: _presetName == preset.name,
-                      onSelected: (_) => _applyPreset(preset),
-                    ),
-                ],
-              ),
-              if ((_s['Guidance'] ?? '').isNotEmpty && _presetName != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: AppText(
-                    _s['Guidance']!,
-                    style: TextStyle(color: context.ink(0.6), fontSize: 12),
+          child: Stepper(
+            currentStep: _step,
+            onStepTapped: (i) {
+              if (i == 0 || _nameController.text.trim().isNotEmpty) {
+                setState(() => _step = i);
+              }
+            },
+            onStepContinue: next,
+            onStepCancel: _step > 0 ? () => setState(() => _step--) : null,
+            controlsBuilder: (context, details) {
+              final last = details.stepIndex == lastStep;
+              if (_isStarting && last) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: AppText(goPro.capture.progress)),
+                    ],
                   ),
-                ),
-              _header('Capture'),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'video',
-                    icon: Icon(Icons.videocam),
-                    label: AppText('Video'),
-                  ),
-                  ButtonSegment(
-                    value: 'photo',
-                    icon: Icon(Icons.photo_camera),
-                    label: AppText('Photo'),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (v) => _set('Mode', v.first),
-              ),
-              const SizedBox(height: 12),
-              if (_video) ...[
-                _row(
-                  'Resolution',
-                  'Resolution',
-                  CaptureOptions.resolutions,
-                  '4K',
-                ),
-                _row('Frame rate', 'FPS', CaptureOptions.fps, '30'),
-                _row('Lens', 'Lens', CaptureOptions.videoLenses, 'Linear'),
-                _row('Bitrate', 'Bitrate', CaptureOptions.bitrates, 'High'),
-                _row(
-                  'Stabilization',
-                  'Hypersmooth',
-                  CaptureOptions.hypersmooth,
-                  keepCamera,
-                ),
-                _row(
-                  'Bit depth',
-                  'Bit Depth',
-                  CaptureOptions.bitDepth,
-                  keepCamera,
-                ),
-              ] else ...[
-                _row(
-                  'Photo format',
-                  'Photo Format',
-                  CaptureOptions.photoFormats,
-                  'Standard',
-                ),
-                _row('Interval', 'Interval', CaptureOptions.intervals, '1s'),
-                if ((_s['Interval'] ?? '1s') != 'Off') ...[
-                  _row('Timing', 'Interval Timing', const [
-                    cameraTimerTiming,
-                    appTiming,
-                  ], cameraTimerTiming),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: AppText(
-                      (_s['Interval Timing'] ?? cameraTimerTiming) ==
-                              cameraTimerTiming
-                          ? 'Each camera runs its own timer, started together: exact interval.'
-                          : 'The app fires every shot and waits for all cameras: confirmed shots, about 3 s apart at best.',
-                      style: TextStyle(color: context.ink(0.54), fontSize: 11),
-                    ),
-                  ),
-                ],
-                _row('Lens', 'Lens', CaptureOptions.photoLenses, 'Linear'),
-              ],
-              AppText(
-                'Sent to every camera over Bluetooth and checked.',
-                style: TextStyle(color: context.ink(0.5), fontSize: 11),
-              ),
-              _header('Exposure'),
-              _row('ISO min', 'Target ISO Min', CaptureOptions.iso, keepCamera),
-              _row('ISO max', 'Target ISO', CaptureOptions.iso, keepCamera),
-              _row(
-                'Shutter',
-                'Target Shutter',
-                CaptureOptions.shutter,
-                keepCamera,
-              ),
-              _row(
-                'White balance',
-                'Target White Balance',
-                CaptureOptions.whiteBalance,
-                keepCamera,
-              ),
-              _row('EV', 'Target EV', CaptureOptions.ev, keepCamera),
-              _row('Color', 'Target Color', CaptureOptions.color, keepCamera),
-              _row(
-                'Sharpness',
-                'Target Sharpness',
-                CaptureOptions.sharpness,
-                keepCamera,
-              ),
-              AppText(
-                'GoPro does not allow these over Bluetooth. Show the QR to each camera (GoPro Labs) or set them on the camera.',
-                style: TextStyle(color: Colors.orange.shade700, fontSize: 11),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: () => showSettingsLabsQr(context, Map.of(_s)),
-                icon: const Icon(Icons.qr_code),
-                label: const AppText('Show exposure QR'),
-              ),
-              const SizedBox(height: 24),
-              if (_startError != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: AppText(
-                    'Project not started: $_startError',
-                    style: const TextStyle(color: Colors.redAccent),
-                  ),
-                ),
-              if (_isStarting)
-                Row(
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                    if (last && _startError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: AppText(
+                          'Project not started: $_startError',
+                          style: const TextStyle(color: Colors.redAccent),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        ElevatedButton(
+                          onPressed: last && cams == 0
+                              ? null
+                              : details.onStepContinue,
+                          child: AppText(
+                            !last
+                                ? settings.translate('next')
+                                : cams == 0
+                                ? 'Connect a camera first'
+                                : widget.project == null
+                                ? settings.translate('start_capture')
+                                : 'Save and continue',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (details.stepIndex > 0)
+                          TextButton(
+                            onPressed: details.onStepCancel,
+                            child: AppText(settings.translate('back')),
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(child: AppText(goPro.capture.progress)),
                   ],
-                )
-              else
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: primary,
-                    minimumSize: const Size.fromHeight(52),
-                  ),
-                  onPressed: cams == 0 ? null : () => _start(context),
-                  icon: const Icon(Icons.play_arrow),
-                  label: AppText(
-                    cams == 0
-                        ? 'Connect a camera first'
-                        : widget.project == null
-                        ? settings.translate('start_capture')
-                        : 'Save and continue',
-                  ),
                 ),
+              );
+            },
+            steps: [
+              Step(
+                title: AppText(settings.translate('project_name')),
+                subtitle: AppText(
+                  cams == 0
+                      ? 'No camera connected'
+                      : '$cams camera${cams == 1 ? '' : 's'} connected',
+                ),
+                isActive: _step >= 0,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _nameController,
+                      decoration: InputDecoration(
+                        labelText: settings.translate('enter_project_name'),
+                        border: const OutlineInputBorder(),
+                        hintText: 'e.g. Living Room Scan',
+                      ),
+                    ),
+                    _header('Cameras'),
+                    const CameraBar(),
+                  ],
+                ),
+              ),
+              Step(
+                title: AppText(settings.translate('camera_settings')),
+                subtitle: AppText(_presetName ?? 'Custom'),
+                isActive: _step >= 1,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const CameraBar(),
+                    _header('Preset'),
+                    SizedBox(
+                      height: 44,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          for (final preset in settings.allPresets)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                avatar: AppText(preset.icon),
+                                label: AppText(preset.name),
+                                selected: _presetName == preset.name,
+                                onSelected: (_) => _applyPreset(preset),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if ((_s['Guidance'] ?? '').isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: AppText(
+                          _s['Guidance']!,
+                          style: TextStyle(
+                            color: context.ink(0.6),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    _header('Capture'),
+                    ..._captureRows(context),
+                    _header('Exposure'),
+                    ..._exposureRows(context),
+                  ],
+                ),
+              ),
+              Step(
+                title: AppText(settings.translate('summary')),
+                isActive: _step >= 2,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _summary(Icons.folder, 'Project', _nameController.text),
+                    _summary(Icons.tune, 'Preset', _presetName ?? 'Custom'),
+                    _summary(
+                      _video ? Icons.videocam : Icons.photo_camera,
+                      'Capture',
+                      _video
+                          ? 'Video ${_s['Resolution'] ?? ''} / ${_s['FPS'] ?? ''} fps / ${_s['Lens'] ?? ''}'
+                          : 'Photo ${_s['Photo Format'] ?? ''} / ${_s['Interval'] ?? ''} / ${_s['Lens'] ?? ''}',
+                    ),
+                    _summary(Icons.exposure, 'Exposure', exposureSummary(_s)),
+                    _summary(Icons.linked_camera, 'Cameras', '$cams connected'),
+                    const SizedBox(height: 4),
+                    AppText(
+                      'Start sends every setting to all cameras over Bluetooth and reads it back.',
+                      style: TextStyle(color: context.ink(0.54), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _summary(IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Theme.of(context).primaryColor),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 80,
+          child: AppText(label, style: TextStyle(color: context.ink(0.54))),
+        ),
+        Expanded(
+          child: AppText(
+            value.isEmpty ? '-' : value,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  List<Widget> _captureRows(BuildContext context) => [
+    SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(
+          value: 'video',
+          icon: Icon(Icons.videocam),
+          label: AppText('Video'),
+        ),
+        ButtonSegment(
+          value: 'photo',
+          icon: Icon(Icons.photo_camera),
+          label: AppText('Photo'),
+        ),
+      ],
+      selected: {_mode},
+      onSelectionChanged: (v) => _set('Mode', v.first),
+    ),
+    const SizedBox(height: 12),
+    if (_video) ...[
+      _row('Resolution', 'Resolution', CaptureOptions.resolutions, '4K'),
+      _row('Frame rate', 'FPS', CaptureOptions.fps, '30'),
+      _row('Lens', 'Lens', CaptureOptions.videoLenses, 'Linear'),
+      _row('Bitrate', 'Bitrate', CaptureOptions.bitrates, 'High'),
+      _row(
+        'Stabilization',
+        'Hypersmooth',
+        CaptureOptions.hypersmooth,
+        keepCamera,
+      ),
+      _row('Bit depth', 'Bit Depth', CaptureOptions.bitDepth, keepCamera),
+    ] else ...[
+      _row(
+        'Photo format',
+        'Photo Format',
+        CaptureOptions.photoFormats,
+        'Standard',
+      ),
+      _row('Interval', 'Interval', CaptureOptions.intervals, '1s'),
+      if ((_s['Interval'] ?? '1s') != 'Off') ...[
+        _row('Timing', 'Interval Timing', const [
+          cameraTimerTiming,
+          appTiming,
+        ], cameraTimerTiming),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: AppText(
+            (_s['Interval Timing'] ?? cameraTimerTiming) == cameraTimerTiming
+                ? 'Each camera runs its own timer, started together: exact interval.'
+                : 'The app fires every shot and waits for all cameras: confirmed shots, about 3 s apart at best.',
+            style: TextStyle(color: context.ink(0.54), fontSize: 11),
+          ),
+        ),
+      ],
+      _row('Lens', 'Lens', CaptureOptions.photoLenses, 'Linear'),
+    ],
+  ];
+
+  List<Widget> _exposureRows(BuildContext context) => [
+    _row('ISO min', 'Target ISO Min', CaptureOptions.iso, keepCamera),
+    _row('ISO max', 'Target ISO', CaptureOptions.iso, keepCamera),
+    _row('Shutter', 'Target Shutter', CaptureOptions.shutter, keepCamera),
+    _row(
+      'White balance',
+      'Target White Balance',
+      CaptureOptions.whiteBalance,
+      keepCamera,
+    ),
+    _row('EV', 'Target EV', CaptureOptions.ev, keepCamera),
+    _row('Color', 'Target Color', CaptureOptions.color, keepCamera),
+    _row('Sharpness', 'Target Sharpness', CaptureOptions.sharpness, keepCamera),
+    AppText(
+      'Sent over Bluetooth and read back (HERO10 and newer). Shutter steps depend on the frame rate and apply to video. For older cameras use the GoPro Labs QR.',
+      style: TextStyle(color: context.ink(0.54), fontSize: 11),
+    ),
+    TextButton.icon(
+      onPressed: () => showSettingsLabsQr(context, Map.of(_s)),
+      icon: const Icon(Icons.qr_code, size: 18),
+      label: const AppText('GoPro Labs QR (fallback)'),
+    ),
+  ];
 
   Widget _header(String text) => Padding(
     padding: const EdgeInsets.only(top: 20, bottom: 8),
